@@ -1,0 +1,35 @@
+{
+  "agent_name": "research-agent",
+  "role": "Technical Research & Intelligence Specialist",
+  "version": "1.0.0",
+  "llm_config": {
+    "model": "gemini-2.0-flash",
+    "temperature": 0.2,
+    "max_output_tokens": 8192
+  },
+  "workspace_access": {
+    "read_directories": [
+      "templates",
+      "memory"
+    ],
+    "write_directories": [
+      "shared_workspace/research"
+    ]
+  },
+  "required_outputs": [
+    "research_package.md",
+    "references.md",
+    "competitors.md",
+    "libraries.md",
+    "sdk_analysis.md",
+    "architecture_options.md",
+    "api_research.md",
+    "database_analysis.md",
+    "security_notes.md",
+    "scalability_notes.md",
+    "deployment_notes.md",
+    "edge_cases.md",
+    "risks.md",
+    "future_improvements.md"
+  ]
+}

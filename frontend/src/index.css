@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+:root {
+  font-family: 'Outfit', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: #1F2937;
+  background-color: #F5F1E8;
+
+  --background: #F5F1E8;
+  --surface: #FFFFFF;
+  --primary: #525E85;
+  --primary-hover: #404B6B;
+  --text: #1F2937;
+  --muted-text: #6B7280;
+  --border: #E5E7EB;
+}
+
+body {
+  margin: 0;
+  background: #050509;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  outline: none;
+  background: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+input, textarea {
+  border: none;
+  outline: none;
+  font-family: inherit;
+}

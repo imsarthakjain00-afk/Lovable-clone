@@ -1,0 +1,26 @@
+{
+  "orchestrator_name": "autonomous-development-orchestrator",
+  "version": "1.0.0",
+  "concurrency_limit": 1,
+  "max_iteration_loops": 5,
+  "stages": [
+    {
+      "stage_id": "research",
+      "agent": "research-agent",
+      "validation_gate": "Gate 1: Verify all 14 files exist and are not empty",
+      "loopback_allowed": true
+    },
+    {
+      "stage_id": "architecture",
+      "agent": "solution-architect",
+      "validation_gate": "Gate 2: Verify folder structure layout is defined and no implementation code is generated",
+      "loopback_allowed": true
+    },
+    {
+      "stage_id": "implementation",
+      "agent": "implementation-engineer",
+      "validation_gate": "Gate 3: Verify codebase matches plans and all source files exist",
+      "loopback_allowed": true
+    }
+  ]
+}
