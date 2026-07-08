@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - FRONTEND_URL=http://localhost:5173
+      # Add other necessary env vars from your backend/.env here, or uncomment the env_file line below:
+      # env_file:
+      #   - ./backend/.env
+    volumes:
+      # Optional: Mount the backend directory for live-reloading (though you need to change CMD to include --reload in Dockerfile)
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      # If you have Vite env vars, add them here
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
