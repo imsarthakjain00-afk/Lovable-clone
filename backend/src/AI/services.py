@@ -1,52 +1,80 @@
-from google import genai as gemini_client
+from groq import Groq
 from src.utils.settings import settings
+import time
+import json
 
 
-# Configure the Gemini client with the API key from environment settings.
+def inject_supabase_to_html(html_content: str, project_id: int) -> str:
+    script_content = f"""
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = "{settings.SUPABASE_URL}";
+        const SUPABASE_ANON_KEY = "{settings.SUPABASE_ANON_KEY}";
+        window.supabaseDb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        window.projectId = "{project_id}";
+    </script>
+    """
+    
+    head_end_idx = html_content.lower().find("</head>")
+    if head_end_idx != -1:
+        return html_content[:head_end_idx] + script_content + html_content[head_end_idx:]
+    return html_content + script_content
+
+
+# Configure the Groq client with the API key from environment settings.
 # If no key is set, we fall back to a realistic simulation mode.
-if settings.GEMINI_API_KEY:
-    gemini_client_instance = gemini_client.Client(api_key=settings.GEMINI_API_KEY)
-    GEMINI_MODEL_NAME = "gemini-2.0-flash"
-    is_gemini_available = True
+if settings.GROQ_API_KEY:
+    groq_client_instance = Groq(api_key=settings.GROQ_API_KEY)
+    GROQ_MODEL_NAME = "llama-3.3-70b-versatile"
+    is_groq_available = True
 else:
-    gemini_client_instance = None
-    GEMINI_MODEL_NAME = None
-    is_gemini_available = False
+    groq_client_instance = None
+    GROQ_MODEL_NAME = None
+    is_groq_available = False
 
 
 WEBSITE_CODE_GENERATION_PROMPT = """
-You are an expert web developer AI assistant. A user wants you to build a website.
-Your job is to generate complete, working HTML code (with embedded CSS and JavaScript) for the website.
+You are an elite frontend AI engineer building a premium, production-ready web application for a user.
+Your job is to generate complete, working, single-file HTML code containing everything (embedded CSS and JavaScript) for the website.
 
-IMPORTANT RULES:
-1. Return ONLY the full HTML code. No explanations, no markdown code blocks.
-2. Start with <!DOCTYPE html> and end with </html>.
-3. Use modern design: dark background, clean typography, gradients, and subtle animations.
-4. Make it fully responsive and mobile-friendly.
-5. Use Google Fonts via a <link> tag.
-6. Include inline CSS in a <style> tag and inline JS in a <script> tag.
-7. Make it look premium and complete, not like a template placeholder.
+CRITICAL RULES:
+1. Return ONLY the raw HTML code. Do NOT wrap it in markdown blockquotes (```html). Start immediately with <!DOCTYPE html> and end with </html>.
+2. YOU MUST USE TAILWIND CSS via CDN: `<script src="https://cdn.tailwindcss.com"></script>`. Configure Tailwind with a custom theme block if needed.
+3. YOU MUST USE GOOGLE FONTS: Inter or Outfit. `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">`
+4. YOU MUST USE ICONS: Include FontAwesome or Lucide via CDN and use icons generously to make the UI look professional.
+5. DESIGN AESTHETIC (LOVABLE-TIER): 
+   - Never use plain white/black backgrounds. Use subtle, beautiful gradients (e.g., bg-slate-900 to bg-indigo-950).
+   - Use Glassmorphism heavily for cards and navbars: `bg-white/10 backdrop-blur-lg border border-white/20`.
+   - Add hover effects, smooth transitions (`transition-all duration-300`), and subtle shadows to everything clickable.
+   - Use vibrant, modern accent colors (purple, teal, indigo).
+6. FUNCTIONALITY:
+   - The UI MUST be fully responsive (mobile-first).
+   - Write real Vanilla JS inside a <script> tag to make the UI fully interactive (modals, dropdowns, form submissions, state toggles).
+   - Do NOT leave empty `#` links if they are meant to do something on the page. Build the logic!
+7. BACKEND RULE: The HTML will automatically have the Supabase Javascript SDK injected into it. If you need to save data (like a contact form), use `window.supabaseDb` and `window.projectId`.
 
-User's request: {user_prompt}
+User's exact request: {user_prompt}
+
+Generate the most beautiful, functional, jaw-dropping version of this request possible.
 """
 
 
-def build_gemini_prompt(user_prompt: str) -> str:
+def build_groq_prompt(user_prompt: str) -> str:
     """Format the user's prompt into the full AI instruction prompt."""
     return WEBSITE_CODE_GENERATION_PROMPT.format(user_prompt=user_prompt)
 
 
-def generate_website_code_with_gemini(user_prompt: str) -> dict:
+def generate_website_code_with_groq(user_prompt: str) -> dict:
     """
-    Send the user's prompt to Gemini and get back a complete website in HTML.
+    Send the user's prompt to Groq and get back a complete website in HTML.
     Returns a dict with 'response_text' and 'generated_code'.
     """
-    full_prompt = build_gemini_prompt(user_prompt)
-    gemini_response = gemini_client_instance.models.generate_content(
-        model=GEMINI_MODEL_NAME,
-        contents=full_prompt
+    full_prompt = build_groq_prompt(user_prompt)
+    response = groq_client_instance.chat.completions.create(
+        model=GROQ_MODEL_NAME,
+        messages=[{"role": "user", "content": full_prompt}],
     )
-    raw_output = gemini_response.text.strip()
+    raw_output = response.choices[0].message.content.strip()
 
     # Clean up in case Gemini wraps the code in markdown code fences
     if raw_output.startswith("```html"):
@@ -215,7 +243,7 @@ def generate_website_code_simulation(user_prompt: str) -> dict:
     return {
         "response_text": (
             f"Here is your generated website for: \"{user_prompt}\". "
-            "Preview it in the panel on the right. (Note: Running in simulation mode — add GEMINI_API_KEY to .env for real AI generation.)"
+            "Preview it in the panel on the right. (Note: Running in simulation mode — add GROQ_API_KEY to .env for real AI generation.)"
         ),
         "generated_code": demo_html
     }
@@ -224,9 +252,42 @@ def generate_website_code_simulation(user_prompt: str) -> dict:
 def generate_website_code(user_prompt: str) -> dict:
     """
     Main entry point for code generation.
-    Uses Gemini if the API key is configured, otherwise uses the simulation.
+    Uses Groq if the API key is configured, otherwise uses the simulation.
     """
-    if is_gemini_available:
-        return generate_website_code_with_gemini(user_prompt)
+    if is_groq_available:
+        return generate_website_code_with_groq(user_prompt)
     else:
         return generate_website_code_simulation(user_prompt)
+
+
+def generate_website_code_stream(user_prompt: str):
+    """
+    Generator version of website code generation.
+    Yields chunks of the generated response/code.
+    """
+    if is_groq_available:
+        full_prompt = build_groq_prompt(user_prompt)
+        response_stream = groq_client_instance.chat.completions.create(
+            model=GROQ_MODEL_NAME,
+            messages=[{"role": "user", "content": full_prompt}],
+            stream=True
+        )
+        for chunk in response_stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+    else:
+        # Simulate streaming by yielding chunks of the demo HTML with short sleeps
+        demo_data = generate_website_code_simulation(user_prompt)
+        demo_html = demo_data["generated_code"]
+        intro_text = demo_data["response_text"] + "\n\n"
+
+        # Yield the response text in words/chunks
+        for word in intro_text.split(" "):
+            yield word + " "
+            time.sleep(0.02)
+
+        # Yield the HTML code in chunks
+        chunk_size = 150
+        for i in range(0, len(demo_html), chunk_size):
+            yield demo_html[i : i + chunk_size]
+            time.sleep(0.02)

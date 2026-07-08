@@ -2,6 +2,7 @@ from fastapi import HTTPException, status, Request
 from sqlalchemy.orm import Session
 from pwdlib import PasswordHash
 import jwt
+import secrets
 from datetime import datetime, timezone, timedelta
 from jwt.exceptions import InvalidTokenError
 from src.Users.models import UserModel
@@ -14,6 +15,7 @@ from src.Users.db_queries import (
 )
 from src.utils.settings import settings
 from src.utils.mail import send_email
+from src.utils.firebase_admin_client import verify_firebase_id_token
 
 password_hash = PasswordHash.recommended()
 
@@ -100,22 +102,7 @@ def login_user_service(
             detail="Invalid Credentials..."
         )
 
-    exp_time = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.EXP_TIME
-    )
-
-    token = jwt.encode(
-        {
-            "_id": user.id,
-            "exp": exp_time.timestamp()
-        },
-        settings.SECRET_KEY,
-        settings.ALGORITHM
-    )
-
-    return {
-        "token": token
-    }
+    return {"token": _build_jwt_token(user.id)}
 
 def is_authenticated_service(
     request: Request,
@@ -160,3 +147,42 @@ def is_authenticated_service(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Token..."
         )
+
+
+def _build_jwt_token(user_id: int) -> str:
+    exp_time = datetime.now(timezone.utc) + timedelta(minutes=settings.EXP_TIME)
+    return jwt.encode(
+        {"_id": user_id, "exp": exp_time.timestamp()},
+        settings.SECRET_KEY,
+        settings.ALGORITHM,
+    )
+
+
+def google_login_service(id_token: str, db: Session):
+    claims = verify_firebase_id_token(id_token)
+    if not claims:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired Google token."
+        )
+
+    email = claims.get("email")
+    name = claims.get("name", email.split("@")[0])
+
+    user = get_user_by_email(email, db)
+
+    if not user:
+        username = email.split("@")[0]
+        existing = get_user_by_username(username, db)
+        if existing:
+            username = f"{username}_{secrets.token_hex(3)}"
+
+        user = UserModel(
+            name=name,
+            username=username,
+            email=email,
+            hash_password=get_password_hash(secrets.token_hex(16)),
+        )
+        user = create_user_query(user, db)
+
+    return {"token": _build_jwt_token(user.id)}

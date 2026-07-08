@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.utils.db import Base, engine
+from src.utils.settings import settings
 
 # Import all database models so SQLAlchemy creates the tables on startup
 from src.Users.models import UserModel
-from src.Projects.models import ProjectModel, ChatMessageModel
+from src.Projects.models import ProjectModel
 
 # Import all route groups
 from src.Users.routers import user_routes
@@ -28,7 +29,7 @@ app = FastAPI(
 # Allow the frontend (running on localhost:5173 in dev) to call this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

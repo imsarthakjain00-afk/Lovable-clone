@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-
+export const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 // Create a shared axios instance that all API calls use
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -47,6 +47,14 @@ export const authAPI = {
     const response = await api.get('/users/is_auth');
     return response.data;
   },
+
+  googleLogin: async (idToken) => {
+    const response = await api.post('/users/google-login', { id_token: idToken });
+    if (response.data.token) {
+      localStorage.setItem('auth_token', response.data.token);
+    }
+    return response.data;
+  },
 };
 
 
@@ -68,8 +76,18 @@ export const projectsAPI = {
     return response.data;
   },
 
+  updateProject: async (projectId, title) => {
+    const response = await api.patch(`/projects/${projectId}`, { title });
+    return response.data;
+  },
+
   deleteProject: async (projectId) => {
     const response = await api.delete(`/projects/${projectId}`);
+    return response.data;
+  },
+
+  deployProject: async (projectId) => {
+    const response = await api.post(`/projects/${projectId}/deploy`);
     return response.data;
   },
 };
@@ -80,6 +98,14 @@ export const projectsAPI = {
 export const aiAPI = {
   generateWebsiteFromPrompt: async (projectId, userPrompt) => {
     const response = await api.post('/ai/generate', {
+      project_id: projectId,
+      user_prompt: userPrompt,
+    });
+    return response.data;
+  },
+
+  deepBuildWebsite: async (projectId, userPrompt) => {
+    const response = await api.post('/ai/deep-build', {
       project_id: projectId,
       user_prompt: userPrompt,
     });

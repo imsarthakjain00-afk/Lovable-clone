@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../api';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
+import { LiquidMetalButton } from '../components/ui/liquid-metal-button';
 import './AuthPage.css';
 
 /**
@@ -100,6 +103,34 @@ function AuthPage({ onLoginSuccess }) {
     }
   };
 
+  const loginWithGoogle = async () => {
+    setErrorMessage('');
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+      await authAPI.googleLogin(idToken);
+      onLoginSuccess();
+      navigate('/dashboard');
+    } catch (error) {
+      // Firebase-side errors (popup, domain, network, etc.)
+      if (error.code) {
+        const firebaseErrors = {
+          'auth/popup-closed-by-user': 'Sign-in popup was closed before completing.',
+          'auth/popup-blocked': 'Popup was blocked by the browser. Please allow popups for this site.',
+          'auth/unauthorized-domain': 'This domain is not authorised in Firebase Console. Add localhost to Authorised Domains.',
+          'auth/cancelled-popup-request': 'Another sign-in popup is already open.',
+          'auth/network-request-failed': 'Network error. Check your internet connection.',
+          'auth/internal-error': 'Firebase internal error. The ID token may have expired.',
+        };
+        setErrorMessage(firebaseErrors[error.code] || `Firebase error: ${error.code} — ${error.message}`);
+      } else {
+        // Backend API error
+        setErrorMessage(error.response?.data?.detail || `Backend error: ${error.message}`);
+      }
+      console.error('[Google Login Error]', error);
+    }
+  };
+
   return (
     <div className="auth-page">
       {/* Background glow */}
@@ -163,14 +194,15 @@ function AuthPage({ onLoginSuccess }) {
                 required
               />
             </div>
-            <button
-              id="login-submit-button"
-              type="submit"
-              className="auth-submit-button"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Signing in...' : 'Sign In'}
-            </button>
+            <div style={{ marginTop: '16px' }}>
+              <LiquidMetalButton
+                id="login-submit-button"
+                type="submit"
+                label={isSubmitting ? 'Signing in...' : 'Sign In'}
+                disabled={isSubmitting}
+                width={320}
+              />
+            </div>
             <p className="auth-switch-text">
               Don't have an account?{' '}
               <span
@@ -240,14 +272,15 @@ function AuthPage({ onLoginSuccess }) {
                 required
               />
             </div>
-            <button
-              id="register-submit-button"
-              type="submit"
-              className="auth-submit-button"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Creating account...' : 'Create Account'}
-            </button>
+            <div style={{ marginTop: '16px' }}>
+              <LiquidMetalButton
+                id="register-submit-button"
+                type="submit"
+                label={isSubmitting ? 'Creating account...' : 'Create Account'}
+                disabled={isSubmitting}
+                width={320}
+              />
+            </div>
             <p className="auth-switch-text">
               Already have an account?{' '}
               <span
@@ -260,6 +293,17 @@ function AuthPage({ onLoginSuccess }) {
             </p>
           </form>
         )}
+
+        <div style={{ textAlign: 'center', margin: '1rem 0', opacity: 0.6 }}>or</div>
+        
+        <div style={{ marginTop: '24px' }}>
+          <LiquidMetalButton
+            label="Continue with Google"
+            onClick={loginWithGoogle}
+            disabled={isSubmitting}
+            width={320}
+          />
+        </div>
       </div>
     </div>
   );

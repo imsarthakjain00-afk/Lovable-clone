@@ -17,3 +17,7 @@ class UserResponseSchema(BaseModel):
 class LoginSchema(BaseModel):
     username: str
     password: str
+
+
+class GoogleLoginSchema(BaseModel):
+    id_token: str

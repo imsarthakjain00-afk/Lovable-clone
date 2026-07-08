@@ -1,5 +1,5 @@
-/* Dashboard.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Dashboard.css */
 
 /* ─── Root Layout ──────────────────────────────────────────────── */
 .dashboard-container {
@@ -437,44 +437,51 @@
   to   { transform: rotate(360deg); }
 }
 
-/* Prompt input area */
+/* Prompt input area — Gemini-style */
 .chat-input-area {
-  padding: 1rem 1.5rem 1.25rem;
+  padding: 0.75rem 1.25rem 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .chat-input-form {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
-.chat-input-wrapper {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
+/* The main card */
+.chat-input-card {
+  background: #1c1c24;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 0.75rem 0.75rem 0.75rem 1rem;
-  transition: border-color 0.2s;
+  border-radius: 18px;
+  padding: 0.85rem 0.85rem 0.6rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.chat-input-wrapper:focus-within {
-  border-color: rgba(139, 92, 246, 0.5);
+.chat-input-card:focus-within {
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
 }
 
+/* Auto-resizing textarea — shows ALL content */
 .chat-prompt-textarea {
   flex: 1;
   background: transparent;
   border: none;
   outline: none;
   resize: none;
-  color: #fff;
+  color: #e8e8f0;
   font-size: 0.95rem;
   font-family: 'Inter', sans-serif;
-  line-height: 1.5;
-  max-height: 120px;
+  line-height: 1.6;
+  min-height: 28px;
+  max-height: 240px;
+  overflow-y: auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .chat-prompt-textarea::placeholder {
@@ -485,34 +492,96 @@
   opacity: 0.5;
 }
 
-.chat-send-button {
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
-  color: #fff;
+/* Bottom toolbar inside the card */
+.chat-input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-toolbar-left,
+.chat-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Generic icon button */
+.chat-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
   border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: color 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+
+.chat-toolbar-btn:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Tools button — active state (Deep Build) */
+.chat-toolbar-tools-btn.tools-active {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.tools-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(139, 92, 246, 0.25);
+  color: #c4b5fd;
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  letter-spacing: 0.3px;
+}
+
+/* Circular send button */
+.chat-send-circle-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #fff;
+  color: #0d0d12;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: opacity 0.2s, transform 0.15s, background 0.2s;
 }
 
-.chat-send-button:hover:not(:disabled) {
+.chat-send-circle-btn:hover:not(:disabled) {
+  background: #e0d9ff;
   transform: scale(1.05);
 }
 
-.chat-send-button:disabled {
-  opacity: 0.4;
+.chat-send-circle-btn:disabled {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.3);
   cursor: not-allowed;
 }
 
 .chat-input-hint {
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.2);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.18);
   text-align: center;
+  margin: 0;
 }
 
 /* ─── Welcome Screen (no project selected) ─────────────────────── */
@@ -579,9 +648,59 @@
 
 .preview-panel-tabs {
   display: flex;
-  gap: 0;
+  justify-content: space-between;
+  align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding: 0 1rem;
+}
+
+.preview-tabs-group {
+  display: flex;
+  gap: 0;
+}
+
+.preview-deploy-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.deployed-url-link {
+  font-size: 0.75rem;
+  color: #a78bfa;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.deployed-url-link:hover {
+  color: #c4b5fd;
+  text-decoration: underline;
+}
+
+.deploy-button {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.8rem;
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  color: #c4b5fd;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.deploy-button:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.25);
+}
+
+.deploy-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .preview-tab-button {

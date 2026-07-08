@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LiquidMetalButton } from '../components/ui/liquid-metal-button';
 import './LandingPage.css';
 
 /**
@@ -66,21 +67,17 @@ function LandingPage() {
           <span onClick={() => navigate('/templates')}>Templates</span>
           <span onClick={() => navigate('/pricing')}>Pricing</span>
         </div>
-        <div className="landing-navbar-buttons">
-          <button
-            id="sign-in-button"
-            className="landing-sign-in-button"
+        <div className="landing-navbar-buttons" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <LiquidMetalButton
+            label="Sign In"
             onClick={handleGoToSignIn}
-          >
-            Sign In
-          </button>
-          <button
-            id="sign-up-button"
-            className="landing-sign-up-button"
+            viewMode="text"
+            width={90}
+          />
+          <LiquidMetalButton
+            label="Get Started Free"
             onClick={handleGoToSignUp}
-          >
-            Get Started Free
-          </button>
+          />
         </div>
       </nav>
 
@@ -100,21 +97,16 @@ function LandingPage() {
           <br />
           Just describe what you want and Lovable builds it for you.
         </p>
-        <div className="landing-hero-buttons">
-          <button
-            id="hero-start-building-button"
-            className="landing-primary-button"
+        <div className="landing-hero-buttons" style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <LiquidMetalButton
+            label="Start Building for Free"
             onClick={handleGoToSignUp}
-          >
-            Start Building for Free
-          </button>
-          <button
-            id="hero-view-templates-button"
-            className="landing-secondary-button"
+          />
+          <LiquidMetalButton
+            label="Browse Templates"
             onClick={() => navigate('/templates')}
-          >
-            Browse Templates
-          </button>
+            width={170}
+          />
         </div>
 
         {/* Fake prompt preview to show what the product does */}
@@ -152,13 +144,12 @@ function LandingPage() {
         <p className="landing-cta-subtitle">
           Join thousands of makers who ship websites in minutes, not months.
         </p>
-        <button
-          id="cta-get-started-button"
-          className="landing-primary-button"
-          onClick={handleGoToSignUp}
-        >
-          Get Started — It's Free
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+          <LiquidMetalButton
+            label="Get Started — It's Free"
+            onClick={handleGoToSignUp}
+          />
+        </div>
       </section>
 
       {/* ─── Footer ──────────────────────────────────────────────────── */}

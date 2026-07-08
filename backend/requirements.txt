@@ -8,4 +8,5 @@ pyjwt
 fastapi-mail
 pydantic-settings
 alembic
-google-genai
+groq
+firebase-admin

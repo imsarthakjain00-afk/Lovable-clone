@@ -21,3 +21,8 @@ def create_project(project_data: CreateProjectRequest, user_id: int, db: Session
 def delete_project(project_id: int, user_id: int, db: Session):
     """Controller: delete a project owned by the current user."""
     return services.delete_project_for_user(project_id, user_id, db)
+
+
+def rename_project(project_id: int, new_title: str, user_id: int, db: Session):
+    """Controller: rename a project owned by the current user."""
+    return services.rename_project_for_user(project_id, new_title, user_id, db)

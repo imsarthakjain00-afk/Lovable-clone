@@ -5,6 +5,9 @@ from typing import Optional
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # CORS Allowed Origins
+    CORS_ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
+
     # Database
     DB_CONNECTION: str
 
@@ -21,8 +24,8 @@ class Settings(BaseSettings):
     MAIL_SERVER: str
     MAIL_FROM_NAME: str
 
-    # AI — Gemini API (optional: if not set, falls back to simulation mode)
-    GEMINI_API_KEY: Optional[str] = None
+    # AI — Groq API (optional: if not set, falls back to simulation mode)
+    GROQ_API_KEY: Optional[str] = None
 
     # Deployment — Vercel API
     VERCEL_TOKEN: Optional[str] = None
@@ -35,6 +38,14 @@ class Settings(BaseSettings):
     FIREBASE_STORAGE_BUCKET: Optional[str] = None
     FIREBASE_MESSAGING_SENDER_ID: Optional[str] = None
     FIREBASE_APP_ID: Optional[str] = None
+
+    # Path to the Firebase Admin SDK service account JSON (for backend token verification)
+    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
+    
+    # Supabase Settings
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
 
 settings = Settings()
 
