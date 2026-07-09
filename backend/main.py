@@ -26,14 +26,33 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Allow the frontend (running on localhost:5173 in dev) to call this API
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Parse CORS origins from comma-separated string
+cors_origins = [
+    origin.strip() 
+    for origin in settings.CORS_ALLOWED_ORIGINS.split(",") 
+    if origin.strip()
+]
+
+# Ensure localhost is always allowed for local development
+if "http://localhost:5173" not in cors_origins:
+    cors_origins.append("http://localhost:5173")
+
+if "*" in cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,  # Must be False when origins="*"
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Register all route groups
 app.include_router(user_routes)

@@ -5,8 +5,8 @@ from typing import Optional
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # CORS Allowed Origins
-    CORS_ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
+    # CORS Allowed Origins (comma separated string)
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:5173"
 
     # Database
     DB_CONNECTION: str
