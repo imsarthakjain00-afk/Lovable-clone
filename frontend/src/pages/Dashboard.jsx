@@ -357,7 +357,7 @@ function Dashboard({ onLogout }) {
         {/* Sidebar Header */}
         <div className="sidebar-header">
           <div className="sidebar-logo">
-            <span>💖</span>
+            <span className="sidebar-logo-mark" aria-hidden="true">✦</span>
             <span className="sidebar-logo-text">Lovable</span>
           </div>
           <button
@@ -365,8 +365,9 @@ function Dashboard({ onLogout }) {
             className="sidebar-logout-button"
             onClick={handleLogout}
             title="Log out"
+            aria-label="Log out"
           >
-            <LogOut size={16} />
+            <LogOut size={14} />
           </button>
         </div>
 
@@ -501,12 +502,12 @@ function Dashboard({ onLogout }) {
             <div className="chat-messages-area">
               {chatMessages.length === 0 ? (
                 <div className="chat-empty-state">
-                  <div className="chat-empty-state-icon">💬</div>
-                  <h2 className="chat-empty-state-title">Start building!</h2>
+                  <div className="chat-empty-state-icon" aria-hidden="true">✦</div>
+                  <h2 className="chat-empty-state-title">Describe your website.</h2>
                   <p className="chat-empty-state-description">
-                    Describe the website you want to build below.
+                    Type a prompt below and Lovable will build
                     <br />
-                    The AI will generate it for you instantly.
+                    a complete website for you instantly.
                   </p>
                 </div>
               ) : (
@@ -516,7 +517,7 @@ function Dashboard({ onLogout }) {
                     className={`chat-message ${message.role === 'user' ? 'is-user-message' : 'is-ai-message'}`}
                   >
                     {message.role === 'ai' && (
-                      <div className="chat-ai-avatar">💖</div>
+                      <div className="chat-ai-avatar" aria-hidden="true">✦</div>
                     )}
                     <div className="chat-message-bubble">
                       {message.message_text}
@@ -540,10 +541,10 @@ function Dashboard({ onLogout }) {
               {/* Typing indicator while AI is generating */}
               {isGenerating && (
                 <div className="chat-message is-ai-message">
-                  <div className="chat-ai-avatar">💖</div>
+                  <div className="chat-ai-avatar" aria-hidden="true">✦</div>
                   <div className="chat-message-bubble chat-typing-indicator" style={{ whiteSpace: 'pre-wrap' }}>
-                    {!streamingText && <Loader2 size={16} className="chat-spinner-icon" />}
-                    {streamingText ? streamingText : 'Building your website...'}
+                    {!streamingText && <Loader2 size={14} className="chat-spinner-icon" />}
+                    {streamingText ? streamingText : 'Generating...'}
                   </div>
                 </div>
               )}
@@ -615,18 +616,20 @@ function Dashboard({ onLogout }) {
         ) : (
           /* ── No project selected — show welcome screen ── */
           <div className="dashboard-welcome-screen">
-            <div className="dashboard-welcome-icon">💖</div>
-            <h1 className="dashboard-welcome-title">Build something Lovable</h1>
+            <div className="dashboard-welcome-icon" aria-hidden="true">✦</div>
+            <h1 className="dashboard-welcome-title">Build something real.</h1>
             <p className="dashboard-welcome-subtitle">
-              Create a new project or select an existing one from the sidebar to get started.
+              Select a project from the sidebar
+              <br />
+              or create a new one to get started.
             </p>
             <button
               id="welcome-create-project-button"
               className="dashboard-welcome-start-button"
               onClick={createNewProject}
             >
-              <Plus size={18} />
-              Create Your First Project
+              <Plus size={15} />
+              New Project
             </button>
           </div>
         )}
