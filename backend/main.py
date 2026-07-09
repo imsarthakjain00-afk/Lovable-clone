@@ -28,7 +28,7 @@ app = FastAPI(
 
 # Parse CORS origins from comma-separated string
 cors_origins = [
-    origin.strip() 
+    origin.strip().rstrip('/') 
     for origin in settings.CORS_ALLOWED_ORIGINS.split(",") 
     if origin.strip()
 ]
