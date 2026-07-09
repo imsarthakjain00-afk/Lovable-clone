@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Path to the Firebase Admin SDK service account JSON (for backend token verification)
     FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
     
+    # Raw JSON string for the Firebase Service Account (used in Railway/production)
+    FIREBASE_SERVICE_ACCOUNT_JSON: Optional[str] = None
+    
     # Supabase Settings
     SUPABASE_URL: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
