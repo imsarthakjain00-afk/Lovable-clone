@@ -3,52 +3,39 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../api';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
-import { LiquidMetalButton } from '../components/ui/liquid-metal-button';
 import './AuthPage.css';
 
 /**
- * AuthPage — handles both Login and Registration in one component.
- * The mode ('login' or 'register') is controlled by the URL query parameter: ?mode=login or ?mode=register.
+ * AuthPage — split-panel premium auth design.
+ * Left: editorial brand panel (hidden on mobile).
+ * Right: focused form panel.
  */
 function AuthPage({ onLoginSuccess }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Read the mode from the URL query string (defaults to 'login')
   const [authMode, setAuthMode] = useState(
     searchParams.get('mode') === 'register' ? 'register' : 'login'
   );
 
-  // Form field states
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [password, setPassword] = useState('');
-
-  // Feedback states
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Update mode when URL param changes
   useEffect(() => {
     const modeFromUrl = searchParams.get('mode');
-    if (modeFromUrl === 'register') {
-      setAuthMode('register');
-    } else {
-      setAuthMode('login');
-    }
+    setAuthMode(modeFromUrl === 'register' ? 'register' : 'login');
   }, [searchParams]);
 
   const clearFormFields = () => {
-    setFullName('');
-    setUsername('');
-    setEmail('');
-    setMobileNumber('');
-    setPassword('');
-    setErrorMessage('');
-    setSuccessMessage('');
+    setFullName(''); setUsername(''); setEmail('');
+    setMobileNumber(''); setPassword('');
+    setErrorMessage(''); setSuccessMessage('');
   };
 
   const switchToLoginMode = () => {
@@ -69,11 +56,8 @@ function AuthPage({ onLoginSuccess }) {
     setIsSubmitting(true);
     try {
       await authAPI.login(username, password);
-      setSuccessMessage('Login successful! Redirecting...');
-      setTimeout(() => {
-        onLoginSuccess();
-        navigate('/dashboard');
-      }, 800);
+      setSuccessMessage('Signed in! Redirecting...');
+      setTimeout(() => { onLoginSuccess(); navigate('/dashboard'); }, 800);
     } catch (error) {
       setErrorMessage(error.response?.data?.detail || 'Invalid username or password.');
     } finally {
@@ -87,13 +71,10 @@ function AuthPage({ onLoginSuccess }) {
     setIsSubmitting(true);
     try {
       await authAPI.register({
-        name: fullName,
-        username,
-        email,
-        password,
+        name: fullName, username, email, password,
         mobile_number: parseInt(mobileNumber, 10) || 0,
       });
-      setSuccessMessage('Account created! Please sign in.');
+      setSuccessMessage('Account created! Signing you in...');
       clearFormFields();
       setTimeout(() => switchToLoginMode(), 1500);
     } catch (error) {
@@ -112,20 +93,17 @@ function AuthPage({ onLoginSuccess }) {
       onLoginSuccess();
       navigate('/dashboard');
     } catch (error) {
-      // Firebase-side errors (popup, domain, network, etc.)
       if (error.code) {
         const firebaseErrors = {
-          'auth/popup-closed-by-user': 'Sign-in popup was closed before completing.',
-          'auth/popup-blocked': 'Popup was blocked by the browser. Please allow popups for this site.',
-          'auth/unauthorized-domain': 'This domain is not authorised in Firebase Console. Add localhost to Authorised Domains.',
+          'auth/popup-closed-by-user': 'Popup closed before completing.',
+          'auth/popup-blocked': 'Popup blocked. Please allow popups for this site.',
+          'auth/unauthorized-domain': 'Domain not authorised in Firebase Console.',
           'auth/cancelled-popup-request': 'Another sign-in popup is already open.',
-          'auth/network-request-failed': 'Network error. Check your internet connection.',
-          'auth/internal-error': 'Firebase internal error. The ID token may have expired.',
+          'auth/network-request-failed': 'Network error. Check your connection.',
         };
-        setErrorMessage(firebaseErrors[error.code] || `Firebase error: ${error.code} — ${error.message}`);
+        setErrorMessage(firebaseErrors[error.code] || `Firebase error: ${error.code}`);
       } else {
-        // Backend API error
-        setErrorMessage(error.response?.data?.detail || `Backend error: ${error.message}`);
+        setErrorMessage(error.response?.data?.detail || `Error: ${error.message}`);
       }
       console.error('[Google Login Error]', error);
     }
@@ -133,196 +111,250 @@ function AuthPage({ onLoginSuccess }) {
 
   return (
     <div className="auth-page">
-      {/* Background effect placeholder (hidden via CSS) */}
-      <div className="auth-page-background-glow" aria-hidden="true" />
 
-      {/* Back to landing page */}
-      <button
-        id="auth-back-to-home-button"
-        className="auth-back-button"
-        onClick={() => navigate('/')}
-        aria-label="Back to Home"
-      >
-        ← Back to Home
-      </button>
-
-      <div className="auth-card" role="main">
+      {/* ── Left: Brand Panel ─────────────────────────────────── */}
+      <div className="auth-brand-panel" aria-hidden="true">
         {/* Logo */}
-        <div className="auth-card-logo" aria-label="Lovable">
-          <span className="auth-card-logo-mark" aria-hidden="true">✦</span>
-          <span className="auth-card-logo-text">Lovable</span>
+        <div className="auth-brand-logo">
+          <span className="auth-brand-logo-mark">✦</span>
+          <span className="auth-brand-logo-text">Lovable</span>
         </div>
 
-        <h1 className="auth-card-title">
-          {authMode === 'login' ? 'Welcome back.' : 'Create your account.'}
-        </h1>
-        <p className="auth-card-subtitle">
-          {authMode === 'login'
-            ? 'Sign in to continue building'
-            : 'Start building websites with AI for free'}
-        </p>
-
-        {/* Feedback messages */}
-        {errorMessage && (
-          <div className="auth-error-message" role="alert">{errorMessage}</div>
-        )}
-        {successMessage && (
-          <div className="auth-success-message" role="status">{successMessage}</div>
-        )}
-
-        {/* ─── Login Form ─────────────────────────────────────────── */}
-        {authMode === 'login' ? (
-          <form id="login-form" onSubmit={handleLoginSubmit}>
-            <div className="auth-form-field">
-              <label htmlFor="login-username">Username</label>
-              <input
-                id="login-username"
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                autoComplete="username"
-              />
+        {/* Central editorial copy */}
+        <div className="auth-brand-body">
+          <h2 className="auth-brand-headline">
+            Build any website
+            <br />
+            <span className="auth-brand-headline-dim">with one prompt.</span>
+          </h2>
+          <div className="auth-brand-steps">
+            <div className="auth-brand-step">
+              <span className="auth-brand-step-num">01</span>
+              <span className="auth-brand-step-text">Describe your website in plain English</span>
             </div>
-            <div className="auth-form-field">
-              <label htmlFor="login-password">Password</label>
-              <input
-                id="login-password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
+            <div className="auth-brand-step">
+              <span className="auth-brand-step-num">02</span>
+              <span className="auth-brand-step-text">Watch Lovable generate real code instantly</span>
             </div>
-            <div className="auth-submit-wrapper">
-              <LiquidMetalButton
-                id="login-submit-button"
-                type="submit"
-                label={isSubmitting ? 'Signing in...' : 'Sign In'}
-                disabled={isSubmitting}
-                width={320}
-              />
+            <div className="auth-brand-step">
+              <span className="auth-brand-step-num">03</span>
+              <span className="auth-brand-step-text">Refine with follow-up prompts — no limits</span>
             </div>
-            <p className="auth-switch-text">
-              Don't have an account?{' '}
-              <span
-                id="switch-to-register-link"
-                className="auth-switch-link"
-                onClick={switchToRegisterMode}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && switchToRegisterMode()}
-              >
-                Create one
-              </span>
-            </p>
-          </form>
-        ) : (
-          /* ─── Register Form ────────────────────────────────────── */
-          <form id="register-form" onSubmit={handleRegisterSubmit}>
-            <div className="auth-form-field">
-              <label htmlFor="register-full-name">Full Name</label>
-              <input
-                id="register-full-name"
-                type="text"
-                placeholder="Your full name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                autoComplete="name"
-              />
-            </div>
-            <div className="auth-form-field">
-              <label htmlFor="register-username">Username</label>
-              <input
-                id="register-username"
-                type="text"
-                placeholder="Choose a username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                autoComplete="username"
-              />
-            </div>
-            <div className="auth-form-field">
-              <label htmlFor="register-email">Email Address</label>
-              <input
-                id="register-email"
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-            </div>
-            <div className="auth-form-field">
-              <label htmlFor="register-mobile-number">Mobile Number</label>
-              <input
-                id="register-mobile-number"
-                type="tel"
-                placeholder="Your mobile number"
-                value={mobileNumber}
-                onChange={(e) => setMobileNumber(e.target.value)}
-                required
-                autoComplete="tel"
-              />
-            </div>
-            <div className="auth-form-field">
-              <label htmlFor="register-password">Password</label>
-              <input
-                id="register-password"
-                type="password"
-                placeholder="Choose a strong password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-              />
-            </div>
-            <div className="auth-submit-wrapper">
-              <LiquidMetalButton
-                id="register-submit-button"
-                type="submit"
-                label={isSubmitting ? 'Creating account...' : 'Create Account'}
-                disabled={isSubmitting}
-                width={320}
-              />
-            </div>
-            <p className="auth-switch-text">
-              Already have an account?{' '}
-              <span
-                id="switch-to-login-link"
-                className="auth-switch-link"
-                onClick={switchToLoginMode}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && switchToLoginMode()}
-              >
-                Sign In
-              </span>
-            </p>
-          </form>
-        )}
-
-        {/* Divider */}
-        <div className="auth-divider" aria-hidden="true">
-          <div className="auth-divider-line" />
-          <span className="auth-divider-text">or</span>
-          <div className="auth-divider-line" />
+          </div>
         </div>
 
-        {/* Google sign-in */}
-        <div className="auth-google-wrapper">
-          <LiquidMetalButton
-            label="Continue with Google"
-            onClick={loginWithGoogle}
-            disabled={isSubmitting}
-            width={320}
-          />
+        {/* Footer */}
+        <div className="auth-brand-footer">
+          <p className="auth-brand-footer-text">Lovable / AI Website System / 2026</p>
+        </div>
+      </div>
+
+      {/* ── Right: Form Panel ─────────────────────────────────── */}
+      <div className="auth-form-panel">
+        {/* Back button */}
+        <button
+          id="auth-back-to-home-button"
+          className="auth-back-button"
+          onClick={() => navigate('/')}
+          aria-label="Back to Home"
+        >
+          ← Back to Home
+        </button>
+
+        <div className="auth-card" role="main">
+          {/* Logo (visible on mobile when brand panel is hidden) */}
+          <div className="auth-card-logo">
+            <span className="auth-card-logo-mark">✦</span>
+            <span className="auth-card-logo-text">Lovable</span>
+          </div>
+
+          {/* Title */}
+          <h1 className="auth-card-title">
+            {authMode === 'login' ? 'Welcome back.' : 'Create account.'}
+          </h1>
+          <p className="auth-card-subtitle">
+            {authMode === 'login'
+              ? 'Sign in to continue building'
+              : 'Start building for free — no credit card needed'}
+          </p>
+
+          {/* Feedback */}
+          {errorMessage && (
+            <div className="auth-error-message" role="alert">{errorMessage}</div>
+          )}
+          {successMessage && (
+            <div className="auth-success-message" role="status">{successMessage}</div>
+          )}
+
+          {/* ── Login Form ──────────────────────────────────────── */}
+          {authMode === 'login' ? (
+            <form id="login-form" onSubmit={handleLoginSubmit}>
+              <div className="auth-form-field">
+                <label htmlFor="login-username">Username</label>
+                <input
+                  id="login-username"
+                  type="text"
+                  placeholder="Enter your username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  autoComplete="username"
+                />
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="login-password">Password</label>
+                <input
+                  id="login-password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <div className="auth-submit-wrapper">
+                <button
+                  id="login-submit-button"
+                  type="submit"
+                  className="auth-primary-btn"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Signing in...' : 'Sign In'}
+                </button>
+              </div>
+
+              <p className="auth-switch-text">
+                Don't have an account?{' '}
+                <span
+                  id="switch-to-register-link"
+                  className="auth-switch-link"
+                  onClick={switchToRegisterMode}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && switchToRegisterMode()}
+                >
+                  Create one
+                </span>
+              </p>
+            </form>
+          ) : (
+            /* ── Register Form ────────────────────────────────── */
+            <form id="register-form" onSubmit={handleRegisterSubmit}>
+              <div className="auth-form-field">
+                <label htmlFor="register-full-name">Full Name</label>
+                <input
+                  id="register-full-name"
+                  type="text"
+                  placeholder="Your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  autoComplete="name"
+                />
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="register-username">Username</label>
+                <input
+                  id="register-username"
+                  type="text"
+                  placeholder="Choose a username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  autoComplete="username"
+                />
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="register-email">Email Address</label>
+                <input
+                  id="register-email"
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="register-mobile-number">Mobile Number</label>
+                <input
+                  id="register-mobile-number"
+                  type="tel"
+                  placeholder="Your mobile number"
+                  value={mobileNumber}
+                  onChange={(e) => setMobileNumber(e.target.value)}
+                  required
+                  autoComplete="tel"
+                />
+              </div>
+              <div className="auth-form-field">
+                <label htmlFor="register-password">Password</label>
+                <input
+                  id="register-password"
+                  type="password"
+                  placeholder="Choose a strong password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className="auth-submit-wrapper">
+                <button
+                  id="register-submit-button"
+                  type="submit"
+                  className="auth-primary-btn"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Creating account...' : 'Create Account'}
+                </button>
+              </div>
+
+              <p className="auth-switch-text">
+                Already have an account?{' '}
+                <span
+                  id="switch-to-login-link"
+                  className="auth-switch-link"
+                  onClick={switchToLoginMode}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && switchToLoginMode()}
+                >
+                  Sign In
+                </span>
+              </p>
+            </form>
+          )}
+
+          {/* Divider */}
+          <div className="auth-divider">
+            <div className="auth-divider-line" />
+            <span className="auth-divider-text">or</span>
+            <div className="auth-divider-line" />
+          </div>
+
+          {/* Google */}
+          <div className="auth-google-wrapper">
+            <button
+              className="auth-google-btn"
+              onClick={loginWithGoogle}
+              disabled={isSubmitting}
+              type="button"
+            >
+              {/* Google G SVG */}
+              <svg className="auth-google-icon" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
+              Continue with Google
+            </button>
+          </div>
         </div>
       </div>
     </div>
