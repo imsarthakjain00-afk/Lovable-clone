@@ -133,27 +133,28 @@ function AuthPage({ onLoginSuccess }) {
 
   return (
     <div className="auth-page">
-      {/* Background glow */}
-      <div className="auth-page-background-glow" />
+      {/* Background effect placeholder (hidden via CSS) */}
+      <div className="auth-page-background-glow" aria-hidden="true" />
 
-      {/* Back to landing page link */}
+      {/* Back to landing page */}
       <button
         id="auth-back-to-home-button"
         className="auth-back-button"
         onClick={() => navigate('/')}
+        aria-label="Back to Home"
       >
         ← Back to Home
       </button>
 
-      <div className="auth-card">
+      <div className="auth-card" role="main">
         {/* Logo */}
-        <div className="auth-card-logo">
-          <span>💖</span>
+        <div className="auth-card-logo" aria-label="Lovable">
+          <span className="auth-card-logo-mark" aria-hidden="true">✦</span>
           <span className="auth-card-logo-text">Lovable</span>
         </div>
 
         <h1 className="auth-card-title">
-          {authMode === 'login' ? 'Welcome back' : 'Create your account'}
+          {authMode === 'login' ? 'Welcome back.' : 'Create your account.'}
         </h1>
         <p className="auth-card-subtitle">
           {authMode === 'login'
@@ -163,10 +164,10 @@ function AuthPage({ onLoginSuccess }) {
 
         {/* Feedback messages */}
         {errorMessage && (
-          <div className="auth-error-message">{errorMessage}</div>
+          <div className="auth-error-message" role="alert">{errorMessage}</div>
         )}
         {successMessage && (
-          <div className="auth-success-message">{successMessage}</div>
+          <div className="auth-success-message" role="status">{successMessage}</div>
         )}
 
         {/* ─── Login Form ─────────────────────────────────────────── */}
@@ -181,6 +182,7 @@ function AuthPage({ onLoginSuccess }) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                autoComplete="username"
               />
             </div>
             <div className="auth-form-field">
@@ -192,9 +194,10 @@ function AuthPage({ onLoginSuccess }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
               />
             </div>
-            <div style={{ marginTop: '16px' }}>
+            <div className="auth-submit-wrapper">
               <LiquidMetalButton
                 id="login-submit-button"
                 type="submit"
@@ -209,6 +212,9 @@ function AuthPage({ onLoginSuccess }) {
                 id="switch-to-register-link"
                 className="auth-switch-link"
                 onClick={switchToRegisterMode}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && switchToRegisterMode()}
               >
                 Create one
               </span>
@@ -226,6 +232,7 @@ function AuthPage({ onLoginSuccess }) {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
+                autoComplete="name"
               />
             </div>
             <div className="auth-form-field">
@@ -237,6 +244,7 @@ function AuthPage({ onLoginSuccess }) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                autoComplete="username"
               />
             </div>
             <div className="auth-form-field">
@@ -248,6 +256,7 @@ function AuthPage({ onLoginSuccess }) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
               />
             </div>
             <div className="auth-form-field">
@@ -259,6 +268,7 @@ function AuthPage({ onLoginSuccess }) {
                 value={mobileNumber}
                 onChange={(e) => setMobileNumber(e.target.value)}
                 required
+                autoComplete="tel"
               />
             </div>
             <div className="auth-form-field">
@@ -270,9 +280,10 @@ function AuthPage({ onLoginSuccess }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="new-password"
               />
             </div>
-            <div style={{ marginTop: '16px' }}>
+            <div className="auth-submit-wrapper">
               <LiquidMetalButton
                 id="register-submit-button"
                 type="submit"
@@ -287,6 +298,9 @@ function AuthPage({ onLoginSuccess }) {
                 id="switch-to-login-link"
                 className="auth-switch-link"
                 onClick={switchToLoginMode}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && switchToLoginMode()}
               >
                 Sign In
               </span>
@@ -294,9 +308,15 @@ function AuthPage({ onLoginSuccess }) {
           </form>
         )}
 
-        <div style={{ textAlign: 'center', margin: '1rem 0', opacity: 0.6 }}>or</div>
-        
-        <div style={{ marginTop: '24px' }}>
+        {/* Divider */}
+        <div className="auth-divider" aria-hidden="true">
+          <div className="auth-divider-line" />
+          <span className="auth-divider-text">or</span>
+          <div className="auth-divider-line" />
+        </div>
+
+        {/* Google sign-in */}
+        <div className="auth-google-wrapper">
           <LiquidMetalButton
             label="Continue with Google"
             onClick={loginWithGoogle}
