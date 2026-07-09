@@ -157,7 +157,7 @@
   transition: opacity 0.7s ease, transform 0.7s ease;
 }
 
-.lp-hero--visible .lp-hero-manifesto {
+.lp-hero-manifesto.lp-hero--visible {
   opacity: 1;
   transform: translateY(0);
 }
