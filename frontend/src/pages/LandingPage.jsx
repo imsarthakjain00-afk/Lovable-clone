@@ -74,53 +74,58 @@ function LandingPage() {
         </div>
       </nav>
 
-      {/* ── Hero ──────────────────────────────────────────────────── */}
+      {/* ── Hero: Editorial Manifesto Cover ───────────────────── */}
       <section className="lp-hero" aria-labelledby="hero-heading">
-        {/* Structural top divider */}
         <div className="lp-hero-top-rule" aria-hidden="true" />
 
-        <div ref={heroRef} className="lp-hero-inner">
-          {/* Classification label */}
-          <div className="lp-hero-label" aria-label="Product category">
-            <span className="lp-hero-label-mark" aria-hidden="true">✦</span>
-            <span>AI WEBSITE SYSTEM&nbsp;/&nbsp;2026</span>
+        {/* Main manifesto canvas */}
+        <div ref={heroRef} className="lp-hero-manifesto">
+
+          {/* Metadata row — top of canvas */}
+          <div className="lp-hero-meta" aria-label="Product classification">
+            <span className="lp-hero-meta-item">✦ LOVABLE</span>
+            <span className="lp-hero-meta-sep" aria-hidden="true">/</span>
+            <span className="lp-hero-meta-item">AI WEBSITE SYSTEM</span>
+            <span className="lp-hero-meta-sep" aria-hidden="true">/</span>
+            <span className="lp-hero-meta-item">2026</span>
           </div>
 
-          {/* Main headline */}
-          <h1 id="hero-heading" className="lp-hero-title">
-            <span className="lp-hero-title-line">Build any website</span>
-            <span className="lp-hero-title-line">
-              with{' '}
-              <span className="lp-hero-title-accent">one prompt.</span>
-            </span>
-          </h1>
+          {/* Statement Block 1 — anchored left */}
+          <div className="lp-hero-statement-top" aria-hidden="true">
+            <span className="lp-hero-word-primary">Intent</span>
+            <span className="lp-hero-word-comma">,</span>
+          </div>
 
-          {/* Description */}
-          <p className="lp-hero-desc">
-            No code. No designers. No waiting.
-            <br />
-            Just describe what you want — Lovable builds it for you.
-          </p>
-
-          {/* CTA row */}
-          <div className="lp-hero-cta">
+          {/* CTA — sits in the visual space between the two phrases */}
+          <div className="lp-hero-cta-zone">
             <LiquidMetalButton
               label="Start Building for Free"
               onClick={handleGoToSignUp}
             />
-            <button
-              className="lp-cta-secondary"
-              onClick={() => navigate('/templates')}
-              aria-label="Browse Templates"
-            >
-              Browse templates&nbsp;↗
-            </button>
           </div>
+
+          {/* Statement Block 2 — anchored right */}
+          <div className="lp-hero-statement-bottom" aria-hidden="true">
+            <span className="lp-hero-word-secondary">not syntax.</span>
+          </div>
+
+          {/* Invisible accessible headline for screen readers */}
+          <h1 id="hero-heading" className="lp-hero-accessible-title">
+            Intent, not syntax. — Lovable: AI Website Builder
+          </h1>
         </div>
 
-        {/* Bottom structural divider */}
-        <div className="lp-hero-rule" aria-hidden="true" />
+        {/* Bottom editorial index line */}
+        <div className="lp-hero-index-bar" aria-hidden="true">
+          <div className="lp-hero-rule" />
+          <div className="lp-hero-index-inner">
+            <span className="lp-hero-index-left">LOVABLE / PRODUCT SYSTEM 001</span>
+            <span className="lp-hero-index-center">AI WEBSITE BUILDER</span>
+            <span className="lp-hero-index-right">SCROLL TO EXPLORE ↓</span>
+          </div>
+        </div>
       </section>
+
 
       {/* ── 01 / DESCRIBE ─────────────────────────────────────────── */}
       <section

@@ -93,17 +93,25 @@ function AuthPage({ onLoginSuccess }) {
       onLoginSuccess();
       navigate('/dashboard');
     } catch (error) {
-      if (error.code) {
+      // Firebase auth errors always have codes starting with 'auth/'
+      if (error.code && String(error.code).startsWith('auth/')) {
         const firebaseErrors = {
-          'auth/popup-closed-by-user': 'Popup closed before completing.',
-          'auth/popup-blocked': 'Popup blocked. Please allow popups for this site.',
-          'auth/unauthorized-domain': 'Domain not authorised in Firebase Console.',
-          'auth/cancelled-popup-request': 'Another sign-in popup is already open.',
-          'auth/network-request-failed': 'Network error. Check your connection.',
+          'auth/popup-closed-by-user': 'Sign-in popup was closed. Please try again.',
+          'auth/popup-blocked': 'Popup blocked — please allow popups for this site and try again.',
+          'auth/unauthorized-domain': 'This domain is not authorised in Firebase. Ask the admin to add it in Firebase Console → Authentication → Settings → Authorised Domains.',
+          'auth/cancelled-popup-request': 'Another sign-in is already in progress.',
+          'auth/network-request-failed': 'Firebase network error. Check your internet connection.',
+          'auth/internal-error': 'Firebase internal error. Please try again.',
         };
-        setErrorMessage(firebaseErrors[error.code] || `Firebase error: ${error.code}`);
+        setErrorMessage(firebaseErrors[error.code] || `Firebase sign-in error: ${error.code}`);
+      } else if (error.code === 'ERR_NETWORK' || error.code === 'ERR_BAD_RESPONSE' || error.message === 'Network Error') {
+        // Axios network error — backend is unreachable
+        setErrorMessage(
+          'Cannot reach the backend server. Make sure the API URL is correctly set and the server is running.'
+        );
       } else {
-        setErrorMessage(error.response?.data?.detail || `Error: ${error.message}`);
+        // Backend returned an error response
+        setErrorMessage(error.response?.data?.detail || `Google sign-in failed. Please try again.`);
       }
       console.error('[Google Login Error]', error);
     }
