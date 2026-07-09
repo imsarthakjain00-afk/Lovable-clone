@@ -159,30 +159,43 @@ def _build_jwt_token(user_id: int) -> str:
 
 
 def google_login_service(id_token: str, db: Session):
-    claims = verify_firebase_id_token(id_token)
-    if not claims:
+    try:
+        claims = verify_firebase_id_token(id_token)
+        if not claims:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired Google token."
+            )
+
+        email = claims.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="Google token has no email.")
+
+        name = claims.get("name", email.split("@")[0])
+        user = get_user_by_email(email, db)
+
+        if not user:
+            username = email.split("@")[0]
+            existing = get_user_by_username(username, db)
+            if existing:
+                username = f"{username}_{secrets.token_hex(3)}"
+
+            user = UserModel(
+                name=name,
+                username=username,
+                email=email,
+                hash_password=get_password_hash(secrets.token_hex(16)),
+            )
+            user = create_user_query(user, db)
+
+        return {"token": _build_jwt_token(user.id)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print("GOOGLE LOGIN CRASH:", error_trace)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired Google token."
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Backend crash: {str(e)}"
         )
-
-    email = claims.get("email")
-    name = claims.get("name", email.split("@")[0])
-
-    user = get_user_by_email(email, db)
-
-    if not user:
-        username = email.split("@")[0]
-        existing = get_user_by_username(username, db)
-        if existing:
-            username = f"{username}_{secrets.token_hex(3)}"
-
-        user = UserModel(
-            name=name,
-            username=username,
-            email=email,
-            hash_password=get_password_hash(secrets.token_hex(16)),
-        )
-        user = create_user_query(user, db)
-
-    return {"token": _build_jwt_token(user.id)}
