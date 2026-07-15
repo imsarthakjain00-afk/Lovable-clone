@@ -33,24 +33,42 @@ async def deploy_project(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    project = controller.get_project_with_chat_history(project_id, current_user.id, db)
-    
-    # Find the latest generated HTML code
+    from src.Projects import db_queries as dq
+    project = dq.get_project_by_id(project_id, db)
+
+    if not project or project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Project not found or access denied.",
+        )
+
+    # Source of truth: file_manifest["index.html"] written by execute_generation_pipeline
     latest_code = None
-    for msg in reversed(project["chat_messages"]):
-        if msg.get("generated_code"):
-            latest_code = msg["generated_code"]
-            break
-            
+    if project.file_manifest:
+        latest_code = project.file_manifest.get("index.html")
+
+    # Fallback: scan chat messages for generated_code
+    if not latest_code:
+        full_project = controller.get_project_with_chat_history(project_id, current_user.id, db)
+        for msg in reversed(full_project.get("chat_messages", [])):
+            if msg.get("generated_code"):
+                latest_code = msg["generated_code"]
+                break
+
     if not latest_code:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No generated code found in this project to deploy."
+            detail="No generated code found. Please generate a website first.",
         )
-        
+
     from src.Projects.deployment_service import deploy_to_vercel
-    deploy_url = await deploy_to_vercel(latest_code, project["title"])
+    deploy_url = await deploy_to_vercel(latest_code, project.title)
+
+    # Persist the URL so it appears in Deployed Sites
+    dq.save_deployed_url(project_id, deploy_url, db)
+
     return {"url": deploy_url}
+
 
 
 @project_routes.get("/{project_id}", status_code=status.HTTP_200_OK)

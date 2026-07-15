@@ -1,75 +1,93 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { authAPI, projectsAPI, aiAPI, WS_BASE_URL } from '../api';
-import { Plus, Trash2, ArrowUp, Code2, Eye, LogOut, Layout, Loader2, Globe, Pencil, Check, X, Mic, SlidersHorizontal } from 'lucide-react';
+import { Loader2, Globe, Monitor, Smartphone, Paperclip, X, PanelLeftOpen, Code2, Eye, CheckCircle2, FileCode, ImagePlus } from 'lucide-react';
+import { SidebarProvider, useSidebar } from '../context/SidebarContext';
+import { ProjectSidebar } from '../components/Sidebar/ProjectSidebar';
+import { DiscoverySummary, DesignSelectionCards, DesignCustomization, ProjectReview, GenerationProgress } from '../components/AI/WorkflowComponents';
 import './Dashboard.css';
+import Prism from 'prismjs';
+import 'prismjs/themes/prism-tomorrow.css';
 
-/**
- * Dashboard — the main workspace after login.
- *
- * Layout:
- *   [Left Sidebar] — list of user's projects + New Project button
- *   [Center Panel] — chat area for the active project
- *   [Right Panel]  — live preview of the generated website (in an iframe)
- */
-function Dashboard({ onLogout }) {
+function DashboardContent({ onLogout }) {
   const navigate = useNavigate();
+  const { projectId } = useParams();
+  const { isMobile, openMobile } = useSidebar();
 
-  // The currently logged-in user's data
   const [currentUser, setCurrentUser] = useState(null);
-
-  // List of all projects for the current user
   const [allProjects, setAllProjects] = useState([]);
-
-  // The project the user currently has open
   const [activeProject, setActiveProject] = useState(null);
-
-  // The chat messages displayed in the center panel
   const [chatMessages, setChatMessages] = useState([]);
-
-  // The HTML code of the most recently generated website
   const [generatedWebsiteCode, setGeneratedWebsiteCode] = useState('');
-
-  // The text the user is currently typing in the prompt input
+  const [previewState, setPreviewState] = useState('EMPTY');
   const [promptInputText, setPromptInputText] = useState('');
-
-  // Whether the AI is currently generating a response
   const [isGenerating, setIsGenerating] = useState(false);
-
-  // The text currently being streamed back by the AI
   const [streamingText, setStreamingText] = useState('');
-
-  // Controls which right panel tab is shown: 'preview' or 'code'
+  const [streamingCode, setStreamingCode] = useState('');
   const [rightPanelTab, setRightPanelTab] = useState('preview');
-
-  // Build mode: 'fast' or 'deep'
+  const [viewportMode, setViewportMode] = useState('desktop');
   const [buildMode, setBuildMode] = useState('fast');
-
-  // Deployment states
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployedUrl, setDeployedUrl] = useState('');
-
-  // Whether we're loading the project list on initial render
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
-
-  // Error to display if something goes wrong
   const [errorMessage, setErrorMessage] = useState('');
-
-  // Project rename state
+  const [generationEvents, setGenerationEvents] = useState([]);
+  const [generationStartTime, setGenerationStartTime] = useState(null);
+  const [generationElapsed, setGenerationElapsed] = useState(0);
+  
   const [renamingProjectId, setRenamingProjectId] = useState(null);
   const [renameInputValue, setRenameInputValue] = useState('');
+  // Code Explorer
+  const [codeEditorTab, setCodeEditorTab] = useState('preview'); // 'preview' | 'code'
+  // Image attachments
+  const [attachedImages, setAttachedImages] = useState([]); // [{name, dataUrl, type}]
+  // File manifest from generation (path -> content)
+  const [fileManifest, setFileManifest] = useState({});
+  const [selectedFile, setSelectedFile] = useState('index.html');
 
-  // Ref to auto-scroll the chat to the latest message
   const chatBottomRef = useRef(null);
-  const renameInputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  // ── On Mount: Load user info and their projects ──────────────────
   useEffect(() => {
     loadCurrentUser();
     loadAllProjects();
   }, []);
 
-  // Auto-scroll chat whenever messages change
+  useEffect(() => {
+    if (streamingCode) {
+      const timer = setTimeout(() => {
+        setGeneratedWebsiteCode(streamingCode);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [streamingCode]);
+
+  useEffect(() => {
+    if (isGenerating) {
+      setGenerationStartTime(Date.now());
+      setGenerationElapsed(0);
+      const interval = setInterval(() => {
+        setGenerationElapsed(prev => prev + 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setGenerationStartTime(null);
+      setGenerationElapsed(0);
+    }
+  }, [isGenerating]);
+
+  useEffect(() => {
+    if (projectId) {
+      openProject(projectId);
+    } else {
+      setActiveProject(null);
+      setChatMessages([]);
+      setGeneratedWebsiteCode('');
+      setPreviewState('EMPTY');
+      setDeployedUrl('');
+    }
+  }, [projectId]);
+
   useEffect(() => {
     scrollChatToBottom();
   }, [chatMessages, isGenerating]);
@@ -79,7 +97,6 @@ function Dashboard({ onLogout }) {
       const userData = await authAPI.getCurrentUser();
       setCurrentUser(userData);
     } catch (error) {
-      // Token is invalid or expired — log the user out
       handleLogout();
     }
   };
@@ -102,64 +119,138 @@ function Dashboard({ onLogout }) {
     }, 100);
   };
 
-  // ── Project Selection ─────────────────────────────────────────────
-  const openProject = async (project) => {
+  useEffect(() => {
+    if (codeEditorTab === 'code' && generatedWebsiteCode) {
+      setTimeout(() => Prism.highlightAll(), 0);
+    }
+  }, [codeEditorTab, generatedWebsiteCode]);
+
+  const openProject = async (id) => {
+    // Immediately wipe previous project state so old data never bleeds into new project
+    setActiveProject(null);
+    setChatMessages([]);
+    setGeneratedWebsiteCode('');
+    setPreviewState('EMPTY');
+    setStreamingCode('');
+    setStreamingText('');
+    setGenerationEvents([]);
+    setErrorMessage('');
+    setIsGenerating(false);
+    setFileManifest({});
+    setSelectedFile('index.html');
+    setDeployedUrl('');
+
     try {
-      setActiveProject(project);
-      const projectWithHistory = await projectsAPI.getProjectWithChatHistory(project.id);
+      const projectWithHistory = await projectsAPI.getProjectWithChatHistory(id);
+      setActiveProject(projectWithHistory);
       setChatMessages(projectWithHistory.chat_messages || []);
 
-      // Load the last generated code from chat history (if any)
-      const lastAiMessageWithCode = [...(projectWithHistory.chat_messages || [])]
-        .reverse()
-        .find((message) => message.role === 'ai' && message.generated_code);
-      if (lastAiMessageWithCode) {
-        setGeneratedWebsiteCode(lastAiMessageWithCode.generated_code);
-      } else {
-        setGeneratedWebsiteCode('');
+      // Restore persisted deployed_url
+      if (projectWithHistory.deployed_url) {
+        setDeployedUrl(projectWithHistory.deployed_url);
       }
-      setDeployedUrl(''); // Reset deployed URL when switching projects
+
+      // Restore website from file_manifest (index.html is the entry point)
+      const persistedManifest = projectWithHistory.file_manifest || {};
+      const persistedHtml = persistedManifest['index.html'];
+
+      if (persistedHtml) {
+        setGeneratedWebsiteCode(persistedHtml);
+        setPreviewState('RENDERING');
+        setRightPanelTab('preview');
+        setFileManifest(persistedManifest);
+        setSelectedFile('index.html');
+      } else {
+        // Fallback: last chat message with generated_code (legacy projects)
+        const lastAiWithCode = [...(projectWithHistory.chat_messages || [])]
+          .reverse()
+          .find(m => m.role === 'ai' && m.generated_code);
+        if (lastAiWithCode) {
+          setGeneratedWebsiteCode(lastAiWithCode.generated_code);
+          setPreviewState('RENDERING');
+        } else {
+          setGeneratedWebsiteCode('');
+          setPreviewState('EMPTY');
+        }
+      }
+
+      // ── Auto-connect WS to receive greeting for brand-new projects ──
+      if (projectWithHistory.workflow_state === 'GREETING') {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          const greetWs = new WebSocket(`${WS_BASE_URL}/ai/ws/${id}?token=${token}`);
+          greetWs.onmessage = (ev) => {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'completed') {
+              setChatMessages(prev => [
+                ...prev,
+                {
+                  id: msg.ai_message_id || `greeting-${Date.now()}`,
+                  role: 'ai',
+                  message_text: msg.response_text,
+                  interaction_type: msg.interaction_type,
+                  options: msg.options || [],
+                  extra_data: msg.extra_data || {},
+                },
+              ]);
+              greetWs.close();
+            }
+          };
+          greetWs.onerror = () => greetWs.close();
+        }
+      }
     } catch (error) {
-      setErrorMessage('Failed to load project. Please try again.');
+      setErrorMessage('Failed to load project.');
+      navigate('/dashboard');
     }
   };
 
-  // ── Create New Project ────────────────────────────────────────────
+  // clearPreview only hides the panel — NEVER deletes the generated code
+  const clearPreview = () => {
+    setPreviewState('EMPTY');
+    // generatedWebsiteCode is intentionally preserved so reopening the panel restores it
+  };
+
   const createNewProject = async () => {
     try {
+      // Wipe all state before creating so no old project data bleeds through
+      setActiveProject(null);
+      setChatMessages([]);
+      setGeneratedWebsiteCode('');
+      setPreviewState('EMPTY');
+      setStreamingCode('');
+      setGenerationEvents([]);
+      setErrorMessage('');
+      setIsGenerating(false);
+
       const newProjectTitle = `Project ${allProjects.length + 1}`;
       const createdProject = await projectsAPI.createProject(newProjectTitle);
       setAllProjects((previousProjects) => [createdProject, ...previousProjects]);
-      openProject(createdProject);
+      navigate(`/dashboard/project/${createdProject.id}`);
     } catch (error) {
       setErrorMessage('Failed to create a new project.');
     }
   };
 
-  // ── Delete a Project ──────────────────────────────────────────────
   const deleteProject = async (event, projectIdToDelete) => {
-    event.stopPropagation(); // Prevent triggering the openProject click
+    event.stopPropagation();
     try {
       await projectsAPI.deleteProject(projectIdToDelete);
       setAllProjects((previousProjects) =>
         previousProjects.filter((project) => project.id !== projectIdToDelete)
       );
-      if (activeProject?.id === projectIdToDelete) {
-        setActiveProject(null);
-        setChatMessages([]);
-        setGeneratedWebsiteCode('');
+      if (String(projectId) === String(projectIdToDelete)) {
+        navigate('/dashboard');
       }
     } catch (error) {
       setErrorMessage('Failed to delete the project.');
     }
   };
 
-  // ── Rename a Project ──────────────────────────────────────────────
   const startRenaming = (event, project) => {
     event.stopPropagation();
     setRenamingProjectId(project.id);
     setRenameInputValue(project.title);
-    setTimeout(() => renameInputRef.current?.focus(), 50);
   };
 
   const cancelRenaming = (event) => {
@@ -168,14 +259,14 @@ function Dashboard({ onLogout }) {
     setRenameInputValue('');
   };
 
-  const submitRename = async (event, projectId) => {
+  const submitRename = async (event, id) => {
     if (event) event.stopPropagation();
     const trimmedName = renameInputValue.trim();
     if (!trimmedName) { cancelRenaming(null); return; }
     try {
-      const updated = await projectsAPI.updateProject(projectId, trimmedName);
-      setAllProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, title: trimmedName } : p));
-      if (activeProject?.id === projectId) setActiveProject((prev) => ({ ...prev, title: trimmedName }));
+      await projectsAPI.updateProject(id, trimmedName);
+      setAllProjects((prev) => prev.map((p) => p.id === id ? { ...p, title: trimmedName } : p));
+      if (activeProject?.id === id) setActiveProject((prev) => ({ ...prev, title: trimmedName }));
     } catch (error) {
       setErrorMessage('Failed to rename the project.');
     } finally {
@@ -183,28 +274,82 @@ function Dashboard({ onLogout }) {
     }
   };
 
-  const handleRenameKeyDown = (event, projectId) => {
-    if (event.key === 'Enter') submitRename(event, projectId);
-    if (event.key === 'Escape') cancelRenaming(event);
+  // ── Image attachment handlers ──────────────────────────────
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setAttachedImages(prev => [
+          ...prev,
+          { name: file.name, dataUrl: ev.target.result, type: file.type }
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    // Reset input so same file can be re-selected
+    e.target.value = '';
   };
 
-  // ── Send a Prompt to the AI ───────────────────────────────────────
+  const removeImage = (index) => {
+    setAttachedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDeploy = async () => {
+
+    if (!activeProject || isDeploying || !generatedWebsiteCode) return;
+    setIsDeploying(true);
+    setErrorMessage('');
+    try {
+      const result = await projectsAPI.deployProject(activeProject.id);
+      setDeployedUrl(result.url);
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      const detail = error.response?.data?.detail || error.message || 'Deployment failed.';
+      setErrorMessage(`Deploy failed: ${detail}`);
+    } finally {
+      setIsDeploying(false);
+    }
+  };
+
   const handleSendPrompt = async (event) => {
+
     event.preventDefault();
-    if (!promptInputText.trim() || !activeProject || isGenerating) return;
+    if (!promptInputText.trim() || isGenerating) return;
+
+    let targetProject = activeProject;
+    
+    if (!targetProject) {
+      try {
+        const newProjectTitle = `Project ${allProjects.length + 1}`;
+        targetProject = await projectsAPI.createProject(newProjectTitle);
+        setAllProjects((previousProjects) => [targetProject, ...previousProjects]);
+        navigate(`/dashboard/project/${targetProject.id}`, { replace: true });
+        setActiveProject(targetProject);
+      } catch (error) {
+        setErrorMessage('Failed to create a new project.');
+        return;
+      }
+    }
 
     const userPromptText = promptInputText;
+    const imagesToSend = [...attachedImages]; // snapshot before clearing
     setPromptInputText('');
+    setAttachedImages([]);
     setIsGenerating(true);
     setStreamingText('');
+    setStreamingCode('');
     setErrorMessage('');
+    setPreviewState('LOADING');
 
-    // Optimistically add the user's message to the chat
     const optimisticUserMessage = {
       id: `temp-${Date.now()}`,
       role: 'user',
       message_text: userPromptText,
       generated_code: null,
+      images: imagesToSend.map(img => img.dataUrl),
     };
     setChatMessages((previousMessages) => [...previousMessages, optimisticUserMessage]);
 
@@ -217,16 +362,14 @@ function Dashboard({ onLogout }) {
 
     if (buildMode === 'deep') {
       try {
-        const data = await aiAPI.deepBuildWebsite(activeProject.id, userPromptText);
+        const data = await aiAPI.deepBuildWebsite(targetProject.id, userPromptText);
         
-        // Update optimistic user message ID
         setChatMessages((prev) =>
           prev.map((msg) =>
             msg.id === optimisticUserMessage.id ? { ...msg, id: data.user_message_id } : msg
           )
         );
         
-        // Add AI response
         setChatMessages((prev) => [
           ...prev,
           {
@@ -238,6 +381,7 @@ function Dashboard({ onLogout }) {
         ]);
         
         setGeneratedWebsiteCode(data.generated_code);
+        setPreviewState('RENDERING');
         setRightPanelTab('preview');
       } catch (error) {
         console.error('[Deep Build Error]', error);
@@ -245,24 +389,28 @@ function Dashboard({ onLogout }) {
         const status = error.response?.status ? ` (HTTP ${error.response.status})` : '';
         setErrorMessage(`Deep Build failed${status}: ${detail}`);
         setChatMessages((prev) => prev.filter((msg) => msg.id !== optimisticUserMessage.id));
+        setPreviewState('ERROR');
       } finally {
         setIsGenerating(false);
       }
       return;
     }
 
-    const wsUrl = `${WS_BASE_URL}/ai/ws/${activeProject.id}?token=${token}`;
+    const wsUrl = `${WS_BASE_URL}/ai/ws/${targetProject.id}?token=${token}`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ user_prompt: userPromptText }));
+      ws.send(JSON.stringify({ 
+        user_prompt: userPromptText,
+        current_code: generatedWebsiteCode,
+        images: imagesToSend.map(img => ({ name: img.name, dataUrl: img.dataUrl, type: img.type }))
+      }));
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
       if (data.type === 'user_message') {
-        // Update the optimistic message with the real ID
         setChatMessages((prev) =>
           prev.map((msg) =>
             msg.id === optimisticUserMessage.id
@@ -270,6 +418,70 @@ function Dashboard({ onLogout }) {
               : msg
           )
         );
+      } else if (data.type === 'pipeline_event') {
+        if (data.data.type === 'code_chunk') {
+          setStreamingCode((prev) => prev + data.data.text);
+          if (previewState !== 'RENDERING') {
+              setPreviewState('RENDERING');
+              setRightPanelTab('preview');
+          }
+        } else if (data.data.type === 'generation_complete') {
+          const finalHtml = data.data.generated_code;
+          const manifest = data.data.file_manifest || {};
+          setGeneratedWebsiteCode(finalHtml);
+          setPreviewState('RENDERING');
+          setRightPanelTab('preview');
+          setIsGenerating(false);
+          setStreamingCode('');
+
+          // Store the file manifest so Code Explorer can show all files
+          if (finalHtml) {
+            setFileManifest({
+              'index.html': finalHtml,
+              ...manifest,
+            });
+            setSelectedFile('index.html');
+          }
+
+          // Build a blob URL so we can open the website in a new tab even if not deployed
+          let previewBlobUrl = null;
+          try {
+            const blob = new Blob([finalHtml], { type: 'text/html' });
+            previewBlobUrl = URL.createObjectURL(blob);
+          } catch (_) {}
+
+          // Add the "Website Ready" card to the chat
+          setChatMessages((prev) => [
+            ...prev.filter(m => !(m.role === 'ai' && m.interaction_type === 'GENERATING_PLACEHOLDER')),
+            {
+              id: `gen-complete-${Date.now()}`,
+              role: 'ai',
+              message_text: '✅ Your website is ready!',
+              interaction_type: 'WEBSITE_READY',
+              extra_data: { previewBlobUrl, deployedUrl },
+            },
+          ]);
+          ws.close();
+
+        } else if (data.data.type === 'generation_failed' || data.data.error) {
+          const errMsg = data.data.error || 'Website generation failed. Please try again.';
+          setErrorMessage(`Generation failed: ${errMsg}`);
+          setIsGenerating(false);
+          setPreviewState('ERROR');
+          setStreamingCode('');
+          ws.close();
+        } else {
+          setGenerationEvents((prev) => {
+            // If the event already exists, update it, otherwise add it
+            const existingIndex = prev.findIndex(e => e.stage === data.data.stage);
+            if (existingIndex >= 0) {
+              const newEvents = [...prev];
+              newEvents[existingIndex] = data.data;
+              return newEvents;
+            }
+            return [...prev, data.data];
+          });
+        }
       } else if (data.type === 'chunk') {
         setStreamingText((prev) => prev + data.text);
       } else if (data.type === 'completed') {
@@ -280,11 +492,27 @@ function Dashboard({ onLogout }) {
             role: 'ai',
             message_text: data.response_text,
             generated_code: data.generated_code,
+            interaction_type: data.interaction_type,
+            options: data.options,
+            extra_data: data.extra_data
           },
         ]);
-        setGeneratedWebsiteCode(data.generated_code);
-        setRightPanelTab('preview');
+        if (data.generated_code) {
+            setGeneratedWebsiteCode(data.generated_code);
+            setPreviewState('RENDERING');
+            setRightPanelTab('preview');
+        }
+        
+        if (data.interaction_type !== 'GENERATING') {
+            setIsGenerating(false);
+            ws.close();
+        }
+        setStreamingText('');
+        setStreamingCode('');
+      } else if (data.type === 'generation_failed' || data.type === 'generation_timeout') {
+        setErrorMessage(data.error || 'The generation process failed.');
         setIsGenerating(false);
+        setPreviewState('ERROR');
         setStreamingText('');
         ws.close();
       }
@@ -294,6 +522,7 @@ function Dashboard({ onLogout }) {
       console.error('[WebSocket Error]', error);
       setErrorMessage('WebSocket connection failed. Make sure the backend server is running on port 8000.');
       setIsGenerating(false);
+      setPreviewState('ERROR');
       setStreamingText('');
       setChatMessages((prev) => prev.filter((msg) => msg.id !== optimisticUserMessage.id));
     };
@@ -305,7 +534,6 @@ function Dashboard({ onLogout }) {
     };
   };
 
-  // ── Handle Enter key in prompt input (Shift+Enter = new line) ────
   const handlePromptKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -313,7 +541,6 @@ function Dashboard({ onLogout }) {
     }
   };
 
-  // ── Auto-resize textarea to fit content ──────────────────────────
   const handleTextareaInput = (e) => {
     setPromptInputText(e.target.value);
     const el = e.target;
@@ -321,404 +548,612 @@ function Dashboard({ onLogout }) {
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   };
 
-  // ── Logout ────────────────────────────────────────────────────────
   const handleLogout = () => {
     authAPI.logout();
     onLogout();
     navigate('/');
   };
 
-  // ── Deploy ────────────────────────────────────────────────────────
-  const handleDeploy = async () => {
-    if (!activeProject || !generatedWebsiteCode) return;
-    setIsDeploying(true);
-    setErrorMessage('');
-    try {
-      const response = await projectsAPI.deployProject(activeProject.id);
-      setDeployedUrl(response.url);
-    } catch (error) {
-      setErrorMessage(error.response?.data?.detail || 'Failed to deploy project.');
-    } finally {
-      setIsDeploying(false);
-    }
-  };
-
-  // ── Format date for sidebar display ──────────────────────────────
-  const formatProjectDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
 
   return (
     <div className="dashboard-container">
-      {/* ─── Left Sidebar ───────────────────────────────────────────── */}
-      <aside className="dashboard-sidebar">
-        {/* Sidebar Header */}
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <span className="sidebar-logo-mark" aria-hidden="true">✦</span>
-            <span className="sidebar-logo-text">Lovable</span>
-          </div>
-          <button
-            id="logout-button"
-            className="sidebar-logout-button"
-            onClick={handleLogout}
-            title="Log out"
-            aria-label="Log out"
-          >
-            <LogOut size={14} />
+      <ProjectSidebar 
+        allProjects={allProjects}
+        isLoadingProjects={isLoadingProjects}
+        createNewProject={createNewProject}
+        deleteProject={deleteProject}
+        submitRename={submitRename}
+        handleLogout={handleLogout}
+        renamingProjectId={renamingProjectId}
+        renameInputValue={renameInputValue}
+        setRenameInputValue={setRenameInputValue}
+        startRenaming={startRenaming}
+        cancelRenaming={cancelRenaming}
+      />
+
+      <div className="dashboard-main-content">
+        {isMobile && (
+          <button className="mobile-sidebar-open-btn" onClick={openMobile}>
+            <PanelLeftOpen size={20} />
           </button>
-        </div>
+        )}
 
-        {/* New Project Button */}
-        <button
-          id="create-new-project-button"
-          className="new-project-button"
-          onClick={createNewProject}
-        >
-          <Plus size={16} />
-          New Project
-        </button>
-
-        {/* Navigation links */}
-        <div className="sidebar-navigation">
-          <button
-            className="sidebar-nav-link"
-            onClick={() => navigate('/templates')}
-          >
-            <Layout size={15} />
-            Templates
-          </button>
-        </div>
-
-        {/* Project list */}
-        <div className="sidebar-project-list-header">My Projects</div>
-
-        <div className="sidebar-project-list">
-          {isLoadingProjects ? (
-            <div className="sidebar-loading-text">Loading projects...</div>
-          ) : allProjects.length === 0 ? (
-            <div className="sidebar-empty-state">
-              No projects yet.
-              <br />
-              Click "New Project" to start!
-            </div>
-          ) : (
-            allProjects.map((project) => (
-              <div
-                key={project.id}
-                id={`project-item-${project.id}`}
-                className={`sidebar-project-item ${activeProject?.id === project.id ? 'is-active' : ''}`}
-                onClick={() => openProject(project)}
-              >
-                <div className="sidebar-project-item-info" onClick={(e) => {
-                  if (activeProject?.id === project.id) {
-                    startRenaming(e, project);
-                  }
-                }}>
-                  {renamingProjectId === project.id ? (
-                    <input
-                      ref={renameInputRef}
-                      className="sidebar-rename-input"
-                      value={renameInputValue}
-                      onChange={(e) => setRenameInputValue(e.target.value)}
-                      onKeyDown={(e) => handleRenameKeyDown(e, project.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span className="sidebar-project-title" title="Click to rename">{project.title}</span>
-                  )}
-                  <span className="sidebar-project-date">
-                    {formatProjectDate(project.created_at)}
-                  </span>
-                </div>
-                <div className="sidebar-project-actions">
-                  {renamingProjectId === project.id ? (
-                    <>
-                      <button className="sidebar-action-btn" onClick={(e) => submitRename(e, project.id)} title="Save name"><Check size={12} /></button>
-                      <button className="sidebar-action-btn" onClick={(e) => cancelRenaming(e)} title="Cancel"><X size={12} /></button>
-                    </>
-                  ) : (
-                    <button className="sidebar-delete-project-button" onClick={(event) => deleteProject(event, project.id)} title="Delete project"><Trash2 size={13} /></button>
-                  )}
+        {projectId ? (
+          <>
+            <aside className="dashboard-chat-panel">
+              <div className="chat-panel-header">
+                <span className="chat-panel-project-title">AI Design Assistant</span>
+                <div className="chat-panel-header-actions">
+                  <span style={{ fontSize: '12px', opacity: 0.5, cursor: 'pointer' }}>⋯</span>
                 </div>
               </div>
-            ))
-          )}
-        </div>
 
-        {/* User info at bottom of sidebar */}
-        {currentUser && (
-          <div className="sidebar-user-info">
-            <div className="sidebar-user-avatar">
-              {currentUser.name?.charAt(0)?.toUpperCase() || 'U'}
-            </div>
-            <div className="sidebar-user-details">
-              <span className="sidebar-user-name">{currentUser.name}</span>
-              <span className="sidebar-user-plan">Free Plan</span>
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* ─── Center Chat Panel ───────────────────────────────────────── */}
-      <main className="dashboard-chat-panel">
-        {activeProject ? (
-          <>
-            {/* Chat header */}
-            <div className="chat-panel-header">
-              {renamingProjectId === activeProject.id ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input
-                    ref={renameInputRef}
-                    className="sidebar-rename-input"
-                    style={{ fontSize: '1.2rem', padding: '0.2rem 0.5rem', background: 'rgba(255,255,255,0.1)' }}
-                    value={renameInputValue}
-                    onChange={(e) => setRenameInputValue(e.target.value)}
-                    onKeyDown={(e) => handleRenameKeyDown(e, activeProject.id)}
-                  />
-                  <button className="sidebar-action-btn" onClick={(e) => submitRename(e, activeProject.id)}><Check size={14} /></button>
-                  <button className="sidebar-action-btn" onClick={(e) => cancelRenaming(e)}><X size={14} /></button>
-                </div>
-              ) : (
-                <span 
-                  className="chat-panel-project-title" 
-                  onClick={(e) => startRenaming(e, activeProject)}
-                  title="Click to rename"
-                  style={{ cursor: 'text' }}
-                >
-                  {activeProject.title}
-                </span>
+              {errorMessage && (
+                <div className="chat-error-banner">{errorMessage}</div>
               )}
-            </div>
 
-            {/* Error message */}
-            {errorMessage && (
-              <div className="chat-error-banner">{errorMessage}</div>
-            )}
-
-            {/* Chat messages */}
-            <div className="chat-messages-area">
-              {chatMessages.length === 0 ? (
-                <div className="chat-empty-state">
-                  <div className="chat-empty-state-icon" aria-hidden="true">✦</div>
-                  <h2 className="chat-empty-state-title">Describe your website.</h2>
-                  <p className="chat-empty-state-description">
-                    Type a prompt below and Lovable will build
-                    <br />
-                    a complete website for you instantly.
-                  </p>
-                </div>
-              ) : (
-                chatMessages.map((message, index) => (
+              <div className="chat-messages-area">
+                {chatMessages.map((message, index) => (
                   <div
                     key={message.id || index}
                     className={`chat-message ${message.role === 'user' ? 'is-user-message' : 'is-ai-message'}`}
                   >
-                    {message.role === 'ai' && (
-                      <div className="chat-ai-avatar" aria-hidden="true">✦</div>
-                    )}
+                    <div className="chat-message-avatar">
+                      {message.role === 'user' ? (currentUser?.name?.charAt(0)?.toUpperCase() || 'U') : '✦'}
+                    </div>
+                    <div className="chat-message-content">
+                      <div className="chat-message-meta">
+                        <span className="chat-message-sender">{message.role === 'user' ? 'User' : 'Assistant'}</span>
+                        {message.role === 'user' && (
+                          <span className="chat-message-time">
+                            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
                     <div className="chat-message-bubble">
-                      {message.message_text}
-                      {message.generated_code && (
-                        <button
-                          className="chat-view-code-button"
-                          onClick={() => {
-                            setGeneratedWebsiteCode(message.generated_code);
-                            setRightPanelTab('preview');
+                      {/* ── QUESTION with chips (single/multi page, yes/no, etc.) ── */}
+                      {(message.interaction_type === 'QUESTION' || message.interaction_type === 'GREETING') && (message.options?.length > 0 || message.extra_data?.chips?.length > 0) ? (
+                        <div>
+                          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{message.message_text}</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                            {(message.options || message.extra_data?.chips || []).map((chip, ci) => (
+                              <button
+                                key={ci}
+                                onClick={() => {
+                                  setPromptInputText(chip);
+                                  const fakeEvent = { preventDefault: () => {} };
+                                  setTimeout(() => handleSendPrompt(fakeEvent), 0);
+                                }}
+                                style={{
+                                  padding: '7px 16px', borderRadius: '20px', fontSize: '0.82rem',
+                                  background: 'rgba(99,102,241,0.18)', border: '1px solid rgba(99,102,241,0.45)',
+                                  color: '#c7d2fe', cursor: 'pointer', fontWeight: 500,
+                                  transition: 'all 0.15s',
+                                }}
+                              >{chip}</button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : message.interaction_type === 'CONFIRMATION' ? (
+                        <DiscoverySummary 
+                          text={message.message_text} 
+                          onConfirm={() => {
+                            setPromptInputText('Yes, looks good!');
+                            const fakeEvent = { preventDefault: () => {} };
+                            setTimeout(() => handleSendPrompt(fakeEvent), 0);
+                          }} 
+                        />
+                      ) : message.interaction_type === 'DESIGN_SELECTION' ? (
+                        <DesignSelectionCards 
+                          text={message.message_text}
+                          recommendations={message.extra_data?.recommendations || []}
+                          onSelect={(id) => {
+                            setPromptInputText(`[sys:select_design] ${id}`);
+                            const fakeEvent = { preventDefault: () => {} };
+                            setTimeout(() => handleSendPrompt(fakeEvent), 0);
                           }}
-                        >
-                          <Eye size={13} />
-                          View Website
-                        </button>
+                        />
+                      ) : message.interaction_type === 'DESIGN_CUSTOMIZATION' ? (
+                        <DesignCustomization 
+                          text={message.message_text}
+                          chips={message.extra_data?.chips || []}
+                          onSelect={(chip) => {
+                            setPromptInputText(chip);
+                            const fakeEvent = { preventDefault: () => {} };
+                            setTimeout(() => handleSendPrompt(fakeEvent), 0);
+                          }}
+                          onSkip={() => {
+                            setPromptInputText('Skip refinements');
+                            const fakeEvent = { preventDefault: () => {} };
+                            setTimeout(() => handleSendPrompt(fakeEvent), 0);
+                          }}
+                        />
+                      ) : message.interaction_type === 'REVIEW' ? (
+                        <ProjectReview 
+                          text={message.message_text}
+                          onConfirm={() => {
+                            setPromptInputText('[sys:confirm_build]');
+                            const fakeEvent = { preventDefault: () => {} };
+                            setTimeout(() => handleSendPrompt(fakeEvent), 0);
+                          }}
+                        />
+                      ) : message.interaction_type === 'WEBSITE_READY' ? (
+                        <div style={{
+                          background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(168,85,247,0.15) 100%)',
+                          border: '1px solid rgba(99,102,241,0.4)',
+                          borderRadius: '12px',
+                          padding: '16px',
+                          marginTop: '4px',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '20px' }}>🚀</span>
+                            <strong style={{ fontSize: '0.95rem' }}>Your website is ready!</strong>
+                          </div>
+                          <p style={{ fontSize: '0.82rem', opacity: 0.75, marginBottom: '14px', lineHeight: 1.5 }}>
+                            The preview is live in the right panel. You can also open it directly in your browser.
+                          </p>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => {
+                                setRightPanelTab('preview');
+                                setCodeEditorTab('preview');
+                              }}
+                              style={{
+                                padding: '7px 14px', borderRadius: '8px', fontSize: '0.8rem',
+                                background: 'rgba(99,102,241,0.25)', border: '1px solid rgba(99,102,241,0.5)',
+                                color: '#fff', cursor: 'pointer', fontWeight: 600,
+                              }}
+                            >
+                              👁 View Preview
+                            </button>
+                            {(message.extra_data?.deployedUrl || deployedUrl) ? (
+                              <a
+                                href={message.extra_data?.deployedUrl || deployedUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  padding: '7px 14px', borderRadius: '8px', fontSize: '0.8rem',
+                                  background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                                  border: 'none', color: '#fff', cursor: 'pointer',
+                                  fontWeight: 600, textDecoration: 'none', display: 'inline-flex',
+                                  alignItems: 'center', gap: '5px',
+                                }}
+                              >
+                                🌐 Visit Live Website ↗
+                              </a>
+                            ) : message.extra_data?.previewBlobUrl ? (
+                              <a
+                                href={message.extra_data.previewBlobUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  padding: '7px 14px', borderRadius: '8px', fontSize: '0.8rem',
+                                  background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                                  border: 'none', color: '#fff', cursor: 'pointer',
+                                  fontWeight: 600, textDecoration: 'none', display: 'inline-flex',
+                                  alignItems: 'center', gap: '5px',
+                                }}
+                              >
+                                🔗 Open in New Tab ↗
+                              </a>
+                            ) : null}
+                            <button
+                              onClick={() => {
+                                setCodeEditorTab('code');
+                                setRightPanelTab('code');
+                              }}
+                              style={{
+                                padding: '7px 14px', borderRadius: '8px', fontSize: '0.8rem',
+                                background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)',
+                                color: '#ccc', cursor: 'pointer',
+                              }}
+                            >
+                              &lt;/&gt; View Code
+                            </button>
+                          </div>
+                          {(message.extra_data?.deployedUrl || deployedUrl) && (
+                            <div style={{
+                              marginTop: '10px', padding: '6px 10px',
+                              background: 'rgba(0,0,0,0.25)', borderRadius: '6px',
+                              fontSize: '0.75rem', fontFamily: 'monospace',
+                              color: '#a5b4fc', wordBreak: 'break-all',
+                            }}>
+                              {message.extra_data?.deployedUrl || deployedUrl}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        message.message_text
+                      )}
+
+                      {/* Show images attached to this message */}
+                      {message.images && message.images.length > 0 && (
+                        <div className="chat-message-images">
+                          {message.images.map((src, i) => (
+                            <img
+                              key={i}
+                              src={src}
+                              alt={`attached-${i}`}
+                              className="chat-message-image"
+                              onClick={() => window.open(src, '_blank')}
+                            />
+                          ))}
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))
-              )}
-
-              {/* Typing indicator while AI is generating */}
-              {isGenerating && (
-                <div className="chat-message is-ai-message">
-                  <div className="chat-ai-avatar" aria-hidden="true">✦</div>
-                  <div className="chat-message-bubble chat-typing-indicator" style={{ whiteSpace: 'pre-wrap' }}>
-                    {!streamingText && <Loader2 size={14} className="chat-spinner-icon" />}
-                    {streamingText ? streamingText : 'Generating...'}
-                  </div>
-                </div>
-              )}
-
-              {/* Invisible anchor to scroll to */}
-              <div ref={chatBottomRef} />
-            </div>
-
-            {/* Prompt input box — Gemini-style card */}
-            <div className="chat-input-area">
-              <form className="chat-input-form" onSubmit={handleSendPrompt}>
-                <div className="chat-input-card">
-                  {/* Text area — grows with content */}
-                  <textarea
-                    id="prompt-input-textarea"
-                    className="chat-prompt-textarea"
-                    placeholder="Describe your website or ask for changes..."
-                    value={promptInputText}
-                    onChange={handleTextareaInput}
-                    onKeyDown={handlePromptKeyDown}
-                    rows={1}
-                    disabled={isGenerating}
-                  />
-
-                  {/* Bottom toolbar */}
-                  <div className="chat-input-toolbar">
-                    {/* Left actions */}
-                    <div className="chat-toolbar-left">
-                      <button type="button" className="chat-toolbar-btn" title="Attach" disabled={isGenerating}>
-                        <Plus size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className={`chat-toolbar-btn chat-toolbar-tools-btn ${buildMode === 'deep' ? 'tools-active' : ''}`}
-                        onClick={() => setBuildMode(buildMode === 'deep' ? 'fast' : 'deep')}
-                        title={buildMode === 'deep' ? 'Deep Build active — click for Fast' : 'Switch to Deep Build'}
-                        disabled={isGenerating}
-                      >
-                        <SlidersHorizontal size={14} />
-                        <span>Tools</span>
-                        {buildMode === 'deep' && <span className="tools-badge">Deep</span>}
-                      </button>
-                    </div>
-
-                    {/* Right actions */}
-                    <div className="chat-toolbar-right">
-                      <button type="button" className="chat-toolbar-btn" title="Voice input" disabled={isGenerating}>
-                        <Mic size={16} />
-                      </button>
-                      <button
-                        id="send-prompt-button"
-                        type="submit"
-                        className="chat-send-circle-btn"
-                        disabled={!promptInputText.trim() || isGenerating}
-                      >
-                        {isGenerating
-                          ? <Loader2 size={16} className="chat-spinner-icon" />
-                          : <ArrowUp size={16} />}
-                      </button>
                     </div>
                   </div>
+                ))}
+
+                {isGenerating && (
+                  <div className="chat-message is-ai-message">
+                    <div className="chat-message-avatar" aria-hidden="true">✦</div>
+                    <div className="chat-message-content">
+                      <div className="chat-message-meta">
+                        <span className="chat-message-sender">Assistant</span>
+                        {generationElapsed > 0 && (
+                          <span className="chat-message-time" style={{ marginLeft: '8px', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            ⏱ {Math.floor(generationElapsed / 60) > 0 ? `${Math.floor(generationElapsed / 60)}m ` : ''}{generationElapsed % 60}s
+                          </span>
+                        )}
+                      </div>
+                      <div className="chat-message-bubble" style={{ padding: '10px 14px' }}>
+                        {/* Real-time generation progress in chat */}
+                        {generationEvents.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {generationEvents.map((ev, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem' }}>
+                                {ev.status === 'completed' ? (
+                                  <span style={{ color: '#4ade80' }}>✓</span>
+                                ) : ev.status === 'in_progress' ? (
+                                  <Loader2 size={11} className="chat-spinner-icon" style={{ color: '#818cf8' }} />
+                                ) : (
+                                  <span style={{ opacity: 0.3 }}>○</span>
+                                )}
+                                <span style={{ opacity: ev.status === 'completed' ? 0.6 : 1 }}>{ev.step}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem' }}>
+                            <Loader2 size={12} className="chat-spinner-icon" />
+                            {streamingText ? streamingText
+                              : streamingCode ? `✍ Writing code... (${streamingCode.length} chars)`
+                              : 'Generating your website...'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatBottomRef} />
+              </div>
+
+              <div className="chat-input-area">
+                <form className="chat-input-form" onSubmit={handleSendPrompt}>
+                  <div className="chat-input-card">
+                    {/* Image previews strip */}
+                    {attachedImages.length > 0 && (
+                      <div className="image-preview-strip">
+                        {attachedImages.map((img, i) => (
+                          <div key={i} className="image-preview-thumb">
+                            <img src={img.dataUrl} alt={img.name} />
+                            <button
+                              type="button"
+                              className="image-preview-remove"
+                              onClick={() => removeImage(i)}
+                              title="Remove image"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <textarea
+                      id="prompt-input-textarea"
+                      className="chat-prompt-textarea"
+                      placeholder={attachedImages.length > 0 ? "Describe how to use these images in your website..." : "Type your design request..."}
+                      value={promptInputText}
+                      onChange={handleTextareaInput}
+                      onKeyDown={handlePromptKeyDown}
+                      rows={1}
+                      disabled={isGenerating}
+                    />
+                    <div className="chat-input-toolbar">
+                      <div className="chat-toolbar-left">
+                        {/* Hidden file input */}
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          style={{ display: 'none' }}
+                          onChange={handleImageSelect}
+                        />
+                        <button
+                          type="button"
+                          className={`chat-toolbar-btn ${attachedImages.length > 0 ? 'active' : ''}`}
+                          title="Attach images"
+                          disabled={isGenerating}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <ImagePlus size={12} />
+                          {attachedImages.length > 0 && (
+                            <span className="image-count-badge">{attachedImages.length}</span>
+                          )}
+                        </button>
+                      </div>
+                      <div className="chat-toolbar-right">
+                        <button
+                          id="send-prompt-button"
+                          type="submit"
+                          className="chat-send-btn"
+                          disabled={(!promptInputText.trim() && attachedImages.length === 0) || isGenerating}
+                        >
+                          Send
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </aside>
+
+            <main className="dashboard-preview-panel">
+              {/* ── Toolbar ───────────────────────────────────────── */}
+              <div className="preview-panel-tabs">
+                <div className="preview-toolbar-left">
+                  <button className="preview-tab-button" title="Close" onClick={clearPreview}>
+                    <X size={12} />
+                  </button>
+                  {/* Preview / Code tab switcher */}
+                  <div className="code-tab-switcher">
+                    <button
+                      className={`code-tab-btn ${codeEditorTab === 'preview' ? 'active' : ''}`}
+                      onClick={() => setCodeEditorTab('preview')}
+                    >
+                      <Eye size={12} /> Preview
+                    </button>
+                    <button
+                      className={`code-tab-btn ${codeEditorTab === 'code' ? 'active' : ''}`}
+                      onClick={() => setCodeEditorTab('code')}
+                    >
+                      <Code2 size={12} /> Code
+                    </button>
+                  </div>
                 </div>
-                <p className="chat-input-hint">
-                  Enter to send · Shift+Enter for new line
-                </p>
-              </form>
-            </div>
+                <div className="preview-toolbar-center">
+                  {codeEditorTab === 'preview' && (
+                    <div className="viewport-toggle-group">
+                      <button
+                        className={`viewport-btn ${viewportMode === 'desktop' ? 'active' : ''}`}
+                        onClick={() => setViewportMode('desktop')}
+                        aria-label="Desktop preview"
+                      >
+                        <Monitor size={12} />
+                      </button>
+                      <button
+                        className={`viewport-btn ${viewportMode === 'mobile' ? 'active' : ''}`}
+                        onClick={() => setViewportMode('mobile')}
+                        aria-label="Mobile preview"
+                      >
+                        <Smartphone size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="preview-toolbar-right">
+                  {previewState === 'RENDERING' && generatedWebsiteCode && (
+                    <span className="generation-success-badge">
+                      <CheckCircle2 size={12} /> Ready
+                    </span>
+                  )}
+                  {deployedUrl && (
+                    <a
+                      href={deployedUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="generation-success-badge"
+                      style={{ textDecoration: 'none', cursor: 'pointer' }}
+                      title={deployedUrl}
+                    >
+                      <CheckCircle2 size={12} /> Live
+                    </a>
+                  )}
+                  <button
+                    className="preview-publish-btn"
+                    onClick={handleDeploy}
+                    disabled={isDeploying || !generatedWebsiteCode}
+                    title={isDeploying ? 'Deploying to Vercel, please wait...' : 'Deploy to Vercel'}
+                  >
+                    {isDeploying ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Loader2 size={12} className="spin-icon" />
+                        Deploying...
+                      </span>
+                    ) : deployedUrl ? 'Redeploy' : 'Publish'}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Panel Content ─────────────────────────────────── */}
+              <div className="preview-panel-content">
+
+                {/* ── PREVIEW TAB ─────────────────────────────────── */}
+                {codeEditorTab === 'preview' && (
+                  <div className={`preview-canvas-wrapper ${viewportMode}`}>
+                    {previewState === 'EMPTY' && (
+                      <div className="empty-preview-state" style={{ height: '100%' }}>
+                        <Globe size={48} style={{ marginBottom: '1rem', opacity: 0.2 }} />
+                        <h3>No Website Generated Yet</h3>
+                        <p style={{ fontSize: '0.9rem', maxWidth: '300px', textAlign: 'center', marginTop: '0.5rem' }}>
+                          Start a conversation to generate a website.
+                        </p>
+                      </div>
+                    )}
+                    {previewState === 'LOADING' && (
+                      <GenerationProgress events={generationEvents} />
+                    )}
+                    {previewState === 'ERROR' && (
+                      <div className="empty-preview-state" style={{ height: '100%', color: '#ef4444' }}>
+                        <h3>Generation Failed</h3>
+                        <p style={{ fontSize: '0.9rem', maxWidth: '300px', textAlign: 'center', marginTop: '0.5rem' }}>
+                          There was an error generating your website. Please try again.
+                        </p>
+                      </div>
+                    )}
+                    {(previewState === 'RENDERING' || (previewState === 'LOADING' && streamingCode)) && generatedWebsiteCode && (
+                      <iframe
+                        id="website-preview-iframe"
+                        className="website-preview-iframe"
+                        srcDoc={(() => {
+                          const cleanHtml = generatedWebsiteCode.replace(/^```(html)?\s*/i, '').replace(/```\s*$/i, '');
+                          return cleanHtml;
+                        })()}
+                        title="Generated Website Preview"
+                        sandbox="allow-scripts allow-same-origin"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* ── CODE TAB ────────────────────────────────────── */}
+                {codeEditorTab === 'code' && (() => {
+                  // Group files by top-level directory
+                  const allFiles = Object.keys(fileManifest);
+                  const groups = {};
+                  allFiles.forEach(path => {
+                    const parts = path.split('/');
+                    const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+                    if (!groups[dir]) groups[dir] = [];
+                    groups[dir].push(path);
+                  });
+
+                  const getFileIcon = (path) => {
+                    if (path.endsWith('.css'))  return '🎨';
+                    if (path.endsWith('.js'))   return '⚡';
+                    if (path.endsWith('.sql'))  return '🗄️';
+                    if (path.endsWith('.md'))   return '📝';
+                    if (path.endsWith('.html')) return '🌐';
+                    return '📄';
+                  };
+
+                  const getLang = (path) => {
+                    if (path.endsWith('.css'))  return 'language-css';
+                    if (path.endsWith('.js'))   return 'language-javascript';
+                    if (path.endsWith('.sql'))  return 'language-sql';
+                    if (path.endsWith('.md'))   return 'language-markdown';
+                    return 'language-html';
+                  };
+
+                  const selectedContent = fileManifest[selectedFile] || '';
+
+                  return (
+                    <div className="code-explorer-layout">
+                      {/* ── File tree sidebar ── */}
+                      <div className="code-file-tree">
+                        <div className="code-file-tree-header">FILES</div>
+                        <div className="code-file-tree-body">
+                          {allFiles.length === 0 ? (
+                            <div style={{ padding: '12px', opacity: 0.4, fontSize: '0.8rem' }}>
+                              Generate a website to see files
+                            </div>
+                          ) : (
+                            Object.entries(groups)
+                              .sort(([a], [b]) => a.localeCompare(b))
+                              .map(([dir, paths]) => (
+                                <div key={dir} className="code-file-group">
+                                  {dir && (
+                                    <span className="code-file-group-label">
+                                      📁 {dir}
+                                    </span>
+                                  )}
+                                  {paths.sort().map(filePath => {
+                                    const name = filePath.split('/').pop();
+                                    const content = fileManifest[filePath] || '';
+                                    const sizeKb = (content.length / 1024).toFixed(1);
+                                    const isActive = selectedFile === filePath;
+                                    return (
+                                      <div
+                                        key={filePath}
+                                        className={`code-file-item ${isActive ? 'active' : ''}`}
+                                        onClick={() => setSelectedFile(filePath)}
+                                        title={filePath}
+                                      >
+                                        <span style={{ fontSize: '11px' }}>{getFileIcon(filePath)}</span>
+                                        <span style={{ flex: 1 }}>{name}</span>
+                                        <span className="code-file-size">{sizeKb}kb</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Code viewer ── */}
+                      <div className="code-editor-panel">
+                        {selectedContent ? (
+                          <>
+                            <div className="code-editor-titlebar">
+                              <span className="code-editor-filename">
+                                {getFileIcon(selectedFile)} {selectedFile}
+                              </span>
+                              <button
+                                className="code-copy-btn"
+                                onClick={() => navigator.clipboard.writeText(selectedContent)}
+                                title="Copy to clipboard"
+                              >
+                                Copy
+                              </button>
+                            </div>
+                            <div className="code-editor-content">
+                              <pre className="code-pre">
+                                <code className={getLang(selectedFile)}>
+                                  {selectedContent.trim()}
+                                </code>
+                              </pre>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="empty-preview-state" style={{ height: '100%' }}>
+                            <Code2 size={40} style={{ marginBottom: '1rem', opacity: 0.15 }} />
+                            <h3 style={{ fontSize: '1rem' }}>No Code Generated Yet</h3>
+                            <p style={{ fontSize: '0.85rem', opacity: 0.5, marginTop: '0.5rem' }}>
+                              Generate a website to view its source code here.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+
+
+              </div>
+            </main>
           </>
         ) : (
-          /* ── No project selected — show welcome screen ── */
-          <div className="dashboard-welcome-screen">
-            <div className="dashboard-welcome-icon" aria-hidden="true">✦</div>
-            <h1 className="dashboard-welcome-title">Build something real.</h1>
-            <p className="dashboard-welcome-subtitle">
-              Select a project from the sidebar
-              <br />
-              or create a new one to get started.
-            </p>
-            <button
-              id="welcome-create-project-button"
-              className="dashboard-welcome-start-button"
-              onClick={createNewProject}
-            >
-              <Plus size={15} />
-              New Project
-            </button>
-          </div>
+          <main className="dashboard-empty-main">
+            <div className="empty-main-content">
+              <Globe size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+              <h2>Select a project</h2>
+              <p style={{ marginTop: '0.5rem', opacity: 0.6 }}>Choose an existing project from the sidebar or create a new one to begin.</p>
+            </div>
+          </main>
         )}
-      </main>
-
-      {/* ─── Right Preview Panel ──────────────────────────────────────── */}
-      <aside className="dashboard-preview-panel">
-        {/* Tab switcher: Preview / Code */}
-        <div className="preview-panel-tabs">
-          <div className="preview-tabs-group">
-            <button
-              id="preview-tab-button"
-              className={`preview-tab-button ${rightPanelTab === 'preview' ? 'is-active-tab' : ''}`}
-              onClick={() => setRightPanelTab('preview')}
-            >
-              <Eye size={14} />
-              Preview
-            </button>
-            <button
-              id="code-tab-button"
-              className={`preview-tab-button ${rightPanelTab === 'code' ? 'is-active-tab' : ''}`}
-              onClick={() => setRightPanelTab('code')}
-            >
-              <Code2 size={14} />
-              Code
-            </button>
-          </div>
-          {generatedWebsiteCode && (
-            <div className="preview-deploy-group">
-              {deployedUrl && (
-                <a href={deployedUrl} target="_blank" rel="noopener noreferrer" className="deployed-url-link">
-                  Live Site
-                </a>
-              )}
-              <button
-                className="deploy-button"
-                onClick={handleDeploy}
-                disabled={isDeploying}
-              >
-                {isDeploying ? <Loader2 size={14} className="chat-spinner-icon" /> : <Globe size={14} />}
-                {isDeploying ? 'Deploying...' : 'Deploy'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Panel content */}
-        <div className="preview-panel-content">
-          {generatedWebsiteCode ? (
-            rightPanelTab === 'preview' ? (
-              /* Live preview inside a sandboxed iframe */
-              <iframe
-                id="website-preview-iframe"
-                className="website-preview-iframe"
-                srcDoc={`
-                  <script>
-                    window.env = {
-                      VITE_FIREBASE_CONFIG: JSON.stringify({
-                        apiKey: "${import.meta.env.VITE_FIREBASE_API_KEY}",
-                        authDomain: "${import.meta.env.VITE_FIREBASE_AUTH_DOMAIN}",
-                        projectId: "${import.meta.env.VITE_FIREBASE_PROJECT_ID}",
-                        storageBucket: "${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET}",
-                        messagingSenderId: "${import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID}",
-                        appId: "${import.meta.env.VITE_FIREBASE_APP_ID}"
-                      })
-                    };
-                  </script>
-                  ${generatedWebsiteCode}
-                `}
-                title="Generated Website Preview"
-                sandbox="allow-scripts allow-same-origin"
-              />
-            ) : (
-              /* Raw HTML code view */
-              <pre className="website-code-viewer">
-                <code>{generatedWebsiteCode}</code>
-              </pre>
-            )
-          ) : (
-            /* Empty state when no code has been generated yet */
-            <div className="preview-panel-empty-state">
-              <Code2 size={40} className="preview-panel-empty-icon" />
-              <p>Your generated website will appear here.</p>
-            </div>
-          )}
-        </div>
-      </aside>
+      </div>
     </div>
   );
 }
 
-export default Dashboard;
+export default function Dashboard(props) {
+  return (
+    <SidebarProvider>
+      <DashboardContent {...props} />
+    </SidebarProvider>
+  );
+}

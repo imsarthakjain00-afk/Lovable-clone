@@ -20,6 +20,7 @@ class ProjectResponse(BaseModel):
     description: Optional[str]
     created_at: datetime
     updated_at: Optional[datetime]
+    deployed_url: Optional[str] = None
 
     class Config:
         from_attributes = True

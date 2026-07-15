@@ -56,6 +56,15 @@ function App() {
             : <Navigate to="/auth?mode=login" replace />
         }
       />
+      
+      <Route
+        path="/dashboard/project/:projectId"
+        element={
+          isUserLoggedIn
+            ? <Dashboard onLogout={handleLogout} />
+            : <Navigate to="/auth?mode=login" replace />
+        }
+      />
 
       {/* ── Catch-all: redirect unknown URLs to the landing page ── */}
       <Route path="*" element={<Navigate to="/" replace />} />

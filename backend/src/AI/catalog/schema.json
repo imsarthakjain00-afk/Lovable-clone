@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "display_name": { "type": "string" },
+    "design_brain": {
+      "type": "object",
+      "properties": {
+        "typography": { "type": "object", "additionalProperties": { "type": "string" } },
+        "spacing": { "type": "string" },
+        "grid_system": { "type": "string" },
+        "border_radius": { "type": "string" },
+        "color_tokens": { "type": "object", "additionalProperties": { "type": "string" } },
+        "desktop_strategy": { "type": "string" },
+        "mobile_strategy": { "type": "string" },
+        "interaction_philosophy": { "type": "string" },
+        "accessibility_rules": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": [
+        "typography", "spacing", "grid_system", "border_radius", 
+        "color_tokens", "desktop_strategy", "mobile_strategy", "interaction_philosophy"
+      ]
+    }
+  },
+  "required": ["id", "display_name", "design_brain"]
+}

@@ -11,3 +11,4 @@ alembic
 groq
 firebase-admin
 supabase
+google-generativeai

@@ -16,6 +16,15 @@ from src.Templates.routers import templates_routes
 # Create all database tables if they don't exist yet
 Base.metadata.create_all(engine)
 
+from src.AI.catalog.service import DesignCatalogService
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load design catalog on startup
+    DesignCatalogService.startup()
+    yield
+
 app = FastAPI(
     title="Lovable Clone API",
     description=(
@@ -23,7 +32,8 @@ app = FastAPI(
         "Users can prompt the AI to generate complete websites, manage their projects, "
         "and view their full chat history."
     ),
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Parse CORS origins from comma-separated string

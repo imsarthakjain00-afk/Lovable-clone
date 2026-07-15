@@ -28,6 +28,10 @@ def get_single_project_with_messages(project_id: int, user_id: int, db: Session)
         "description": project.description,
         "created_at": project.created_at,
         "updated_at": project.updated_at,
+        "workflow_state": project.workflow_state,
+        "deployed_url": project.deployed_url,
+        "file_manifest": project.file_manifest or {},
+        "generation_count": project.generation_count or 0,
         "chat_messages": chat_messages,
     }
 
@@ -37,6 +41,7 @@ def create_project_for_user(project_data: CreateProjectRequest, user_id: int, db
         user_id=user_id,
         title=project_data.title,
         description=project_data.description,
+        workflow_state="GREETING",
     )
     return db_queries.create_new_project(new_project, db)
 

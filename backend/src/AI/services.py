@@ -1,293 +1,202 @@
-from groq import Groq
 from src.utils.settings import settings
-import time
 import json
+import logging
+from src.AI.agent import WebsiteCreationAgent
+
+logger = logging.getLogger(__name__)
 
 
-def inject_supabase_to_html(html_content: str, project_id: int) -> str:
-    script_content = f"""
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-        const SUPABASE_URL = "{settings.SUPABASE_URL}";
-        const SUPABASE_ANON_KEY = "{settings.SUPABASE_ANON_KEY}";
-        window.supabaseDb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        window.projectId = "{project_id}";
-    </script>
+def _build_firebase_auth_script(project_id: int) -> str:
     """
-    
-    head_end_idx = html_content.lower().find("</head>")
-    if head_end_idx != -1:
-        return html_content[:head_end_idx] + script_content + html_content[head_end_idx:]
-    return html_content + script_content
+    Returns a self-contained <script> block that:
+      1. Initialises Firebase Auth (Google + Email/Password)
+      2. On sign-in, stores the user profile in Supabase (website_users table)
+      3. Exposes window helpers: signInWithGoogle(), signInWithEmail(),
+         signUpWithEmail(), signOutUser(), getCurrentUser()
+    Uses the compat CDN build so it works in plain HTML with no bundler.
+    """
+    firebase_config = json.dumps({
+        "apiKey":            settings.FIREBASE_API_KEY            or "",
+        "authDomain":        settings.FIREBASE_AUTH_DOMAIN        or "",
+        "projectId":         settings.FIREBASE_PROJECT_ID         or "",
+        "storageBucket":     settings.FIREBASE_STORAGE_BUCKET     or "",
+        "messagingSenderId": settings.FIREBASE_MESSAGING_SENDER_ID or "",
+        "appId":             settings.FIREBASE_APP_ID             or "",
+        "measurementId":     settings.FIREBASE_MEASUREMENT_ID     or "",
+    })
 
+    supabase_url  = settings.SUPABASE_URL      or ""
+    supabase_key  = settings.SUPABASE_ANON_KEY or ""
 
-# Configure the Groq client with the API key from environment settings.
-# If no key is set, we fall back to a realistic simulation mode.
-if settings.GROQ_API_KEY:
-    groq_client_instance = Groq(api_key=settings.GROQ_API_KEY)
-    GROQ_MODEL_NAME = "llama-3.3-70b-versatile"
-    is_groq_available = True
-else:
-    groq_client_instance = None
-    GROQ_MODEL_NAME = None
-    is_groq_available = False
+    return f"""
+<!-- ═══════════════════════════════════════════════════════════════
+     Firebase Auth + Supabase (injected by Lovable Clone)
+     Auth provider : Firebase  |  Data store : Supabase
+═══════════════════════════════════════════════════════════════ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function() {{
+  // ── Firebase init ──────────────────────────────────────────────
+  const _fbConfig = {firebase_config};
+  if (!firebase.apps.length) {{
+    firebase.initializeApp(_fbConfig);
+  }}
+  const _auth = firebase.auth();
 
+  // ── Supabase init ──────────────────────────────────────────────
+  const _sb = supabase.createClient("{supabase_url}", "{supabase_key}");
+  window.supabaseDb  = _sb;   // also expose for page scripts
+  window.projectSiteId = "{project_id}";
 
-WEBSITE_CODE_GENERATION_PROMPT = """
-You are an elite frontend AI engineer building a premium, production-ready web application for a user.
-Your job is to generate complete, working, single-file HTML code containing everything (embedded CSS and JavaScript) for the website.
+  // ── Save / update user profile in Supabase after login ────────
+  async function _syncUserToSupabase(fbUser) {{
+    if (!fbUser) return;
+    try {{
+      await _sb.from("website_users").upsert({{
+        firebase_uid : fbUser.uid,
+        email        : fbUser.email || "",
+        display_name : fbUser.displayName || "",
+        photo_url    : fbUser.photoURL  || "",
+        project_id   : "{project_id}",
+        last_login   : new Date().toISOString()
+      }}, {{ onConflict: "firebase_uid,project_id" }});
+    }} catch(e) {{
+      console.warn("[Auth] Supabase sync error:", e.message);
+    }}
+  }}
 
-CRITICAL RULES:
-1. Return ONLY the raw HTML code. Do NOT wrap it in markdown blockquotes (```html). Start immediately with <!DOCTYPE html> and end with </html>.
-2. YOU MUST USE TAILWIND CSS via CDN: `<script src="https://cdn.tailwindcss.com"></script>`. Configure Tailwind with a custom theme block if needed.
-3. YOU MUST USE GOOGLE FONTS: Inter or Outfit. `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">`
-4. YOU MUST USE ICONS: Include FontAwesome or Lucide via CDN and use icons generously to make the UI look professional.
-5. DESIGN AESTHETIC (LOVABLE-TIER): 
-   - Never use plain white/black backgrounds. Use subtle, beautiful gradients (e.g., bg-slate-900 to bg-indigo-950).
-   - Use Glassmorphism heavily for cards and navbars: `bg-white/10 backdrop-blur-lg border border-white/20`.
-   - Add hover effects, smooth transitions (`transition-all duration-300`), and subtle shadows to everything clickable.
-   - Use vibrant, modern accent colors (purple, teal, indigo).
-6. FUNCTIONALITY:
-   - The UI MUST be fully responsive (mobile-first).
-   - Write real Vanilla JS inside a <script> tag to make the UI fully interactive (modals, dropdowns, form submissions, state toggles).
-   - Do NOT leave empty `#` links if they are meant to do something on the page. Build the logic!
-7. BACKEND RULE: The HTML will automatically have the Supabase Javascript SDK injected into it. If you need to save data (like a contact form), use `window.supabaseDb` and `window.projectId`.
+  // ── Auth state listener ────────────────────────────────────────
+  _auth.onAuthStateChanged(function(user) {{
+    window._currentFirebaseUser = user || null;
+    if (user) {{
+      _syncUserToSupabase(user);
+      // Dispatch event so page scripts can react
+      document.dispatchEvent(new CustomEvent("userSignedIn",  {{ detail: user }}));
+    }} else {{
+      document.dispatchEvent(new CustomEvent("userSignedOut", {{ detail: null  }}));
+    }}
+  }});
 
-User's exact request: {user_prompt}
+  // ── Public helpers ─────────────────────────────────────────────
 
-Generate the most beautiful, functional, jaw-dropping version of this request possible.
+  /** Sign in with Google popup */
+  window.signInWithGoogle = async function() {{
+    const provider = new firebase.auth.GoogleAuthProvider();
+    try {{
+      const result = await _auth.signInWithPopup(provider);
+      return result.user;
+    }} catch(e) {{
+      console.error("[Auth] Google sign-in failed:", e.message);
+      throw e;
+    }}
+  }};
+
+  /** Sign in with email + password */
+  window.signInWithEmail = async function(email, password) {{
+    try {{
+      const result = await _auth.signInWithEmailAndPassword(email, password);
+      return result.user;
+    }} catch(e) {{
+      console.error("[Auth] Email sign-in failed:", e.message);
+      throw e;
+    }}
+  }};
+
+  /** Create account with email + password */
+  window.signUpWithEmail = async function(email, password, displayName) {{
+    try {{
+      const result = await _auth.createUserWithEmailAndPassword(email, password);
+      if (displayName) {{
+        await result.user.updateProfile({{ displayName }});
+      }}
+      return result.user;
+    }} catch(e) {{
+      console.error("[Auth] Sign-up failed:", e.message);
+      throw e;
+    }}
+  }};
+
+  /** Sign out */
+  window.signOutUser = async function() {{
+    await _auth.signOut();
+  }};
+
+  /** Get currently signed-in user (null if not signed in) */
+  window.getCurrentUser = function() {{
+    return window._currentFirebaseUser || null;
+  }};
+
+  console.log("[Lovable] Firebase Auth ready. Use: signInWithGoogle(), signInWithEmail(), signUpWithEmail(), signOutUser()");
+}})();
+</script>
 """
 
 
-def build_groq_prompt(user_prompt: str) -> str:
-    """Format the user's prompt into the full AI instruction prompt."""
-    return WEBSITE_CODE_GENERATION_PROMPT.format(user_prompt=user_prompt)
+def inject_auth_into_html(html_content: str, project_id: int) -> str:
+    """
+    Injects the Firebase Auth + Supabase block just before </head>.
+    Falls back gracefully if Firebase config is not yet set.
+    """
+    if not html_content:
+        return ""
+
+    if not settings.FIREBASE_API_KEY:
+        # Firebase not configured — inject only Supabase client
+        logger.warning("[inject_auth] FIREBASE_API_KEY not set — injecting Supabase only")
+        script = f"""
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  window.supabaseDb = supabase.createClient("{settings.SUPABASE_URL or ''}", "{settings.SUPABASE_ANON_KEY or ''}");
+  window.projectSiteId = "{project_id}";
+</script>
+"""
+    else:
+        script = _build_firebase_auth_script(project_id)
+
+    head_end = html_content.lower().find("</head>")
+    if head_end != -1:
+        return html_content[:head_end] + script + html_content[head_end:]
+    return script + html_content
 
 
-def generate_website_code_with_groq(user_prompt: str) -> dict:
+# Keep legacy name so nothing else breaks
+def inject_supabase_to_html(html_content: str, project_id: int) -> str:
+    return inject_auth_into_html(html_content, project_id)
+
+
+async def process_user_prompt(
+    project_id: int,
+    user_prompt: str,
+    current_state: str,
+    current_brain: dict,
+    current_manifest: dict,
+    current_code: str = None,
+    images: list = None,
+) -> dict:
     """
-    Send the user's prompt to Groq and get back a complete website in HTML.
-    Returns a dict with 'response_text' and 'generated_code'.
+    Instantiates the stateful WebsiteCreationAgent and processes the user's message.
     """
-    full_prompt = build_groq_prompt(user_prompt)
-    response = groq_client_instance.chat.completions.create(
-        model=GROQ_MODEL_NAME,
-        messages=[{"role": "user", "content": full_prompt}],
+    agent = WebsiteCreationAgent(
+        project_id=project_id,
+        initial_state=current_state,
+        initial_brain=current_brain,
+        initial_manifest=current_manifest
     )
-    raw_output = response.choices[0].message.content.strip()
 
-    # Clean up in case Gemini wraps the code in markdown code fences
-    if raw_output.startswith("```html"):
-        raw_output = raw_output[7:]
-    if raw_output.startswith("```"):
-        raw_output = raw_output[3:]
-    if raw_output.endswith("```"):
-        raw_output = raw_output[:-3]
+    response_data = await agent.process_message(user_prompt, current_code)
 
-    generated_html_code = raw_output.strip()
+    # Inject Firebase Auth + Supabase into generated HTML
+    if response_data.get("generated_code"):
+        code = response_data["generated_code"]
+        # Strip markdown fences if the LLM leaked them
+        if code.startswith("```html"):
+            code = code[7:]
+        if code.startswith("```"):
+            code = code[3:]
+        if code.endswith("```"):
+            code = code[:-3]
+        response_data["generated_code"] = inject_auth_into_html(code.strip(), project_id)
 
-    return {
-        "response_text": "Your website has been generated successfully! Preview it in the panel on the right.",
-        "generated_code": generated_html_code
-    }
-
-
-def generate_website_code_simulation(user_prompt: str) -> dict:
-    """
-    Fallback simulation when no Gemini API key is configured.
-    Returns a fully functional demo website so the UI still works.
-    """
-    website_title = user_prompt[:50] if len(user_prompt) > 50 else user_prompt
-    demo_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{website_title}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{
-      font-family: 'Inter', sans-serif;
-      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-      color: #ffffff;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }}
-    nav {{
-      width: 100%;
-      padding: 1.5rem 3rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: rgba(255,255,255,0.05);
-      backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-    }}
-    .logo {{ font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; }}
-    .nav-links {{ display: flex; gap: 2rem; font-size: 0.9rem; opacity: 0.8; }}
-    .hero {{
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 4rem 2rem;
-      max-width: 800px;
-    }}
-    .hero-badge {{
-      background: rgba(139, 92, 246, 0.2);
-      border: 1px solid rgba(139, 92, 246, 0.4);
-      color: #c4b5fd;
-      padding: 0.4rem 1rem;
-      border-radius: 999px;
-      font-size: 0.8rem;
-      margin-bottom: 1.5rem;
-    }}
-    h1 {{
-      font-size: clamp(2.5rem, 6vw, 4.5rem);
-      font-weight: 800;
-      line-height: 1.1;
-      margin-bottom: 1.5rem;
-      background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }}
-    .subtitle {{ font-size: 1.2rem; opacity: 0.7; margin-bottom: 2.5rem; line-height: 1.6; }}
-    .cta-buttons {{ display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }}
-    .btn-primary {{
-      background: linear-gradient(135deg, #7c3aed, #4f46e5);
-      color: white;
-      border: none;
-      padding: 1rem 2rem;
-      border-radius: 12px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }}
-    .btn-primary:hover {{ transform: translateY(-2px); box-shadow: 0 10px 30px rgba(124,58,237,0.4); }}
-    .btn-secondary {{
-      background: rgba(255,255,255,0.08);
-      color: white;
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 1rem 2rem;
-      border-radius: 12px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-    }}
-    .features {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1.5rem;
-      width: 100%;
-      max-width: 900px;
-      padding: 0 2rem 4rem;
-    }}
-    .feature-card {{
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 16px;
-      padding: 2rem;
-      text-align: center;
-      transition: transform 0.2s;
-    }}
-    .feature-card:hover {{ transform: translateY(-4px); }}
-    .feature-icon {{ font-size: 2rem; margin-bottom: 1rem; }}
-    .feature-title {{ font-weight: 600; margin-bottom: 0.5rem; }}
-    .feature-desc {{ font-size: 0.9rem; opacity: 0.6; }}
-  </style>
-</head>
-<body>
-  <nav>
-    <div class="logo">✦ {website_title[:20]}</div>
-    <div class="nav-links">
-      <span>Features</span>
-      <span>Pricing</span>
-      <span>About</span>
-    </div>
-  </nav>
-  <section class="hero">
-    <div class="hero-badge">✨ AI Generated Website</div>
-    <h1>{website_title}</h1>
-    <p class="subtitle">A beautiful, responsive website built with AI in seconds. Customize it to match your brand and vision.</p>
-    <div class="cta-buttons">
-      <button class="btn-primary">Get Started Free</button>
-      <button class="btn-secondary">Learn More</button>
-    </div>
-  </section>
-  <section class="features">
-    <div class="feature-card">
-      <div class="feature-icon">🚀</div>
-      <div class="feature-title">Lightning Fast</div>
-      <div class="feature-desc">Optimized for performance and speed out of the box.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">🎨</div>
-      <div class="feature-title">Beautiful Design</div>
-      <div class="feature-desc">Modern, clean UI with premium aesthetics.</div>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">📱</div>
-      <div class="feature-title">Fully Responsive</div>
-      <div class="feature-desc">Works perfectly on all screen sizes and devices.</div>
-    </div>
-  </section>
-</body>
-</html>"""
-
-    return {
-        "response_text": (
-            f"Here is your generated website for: \"{user_prompt}\". "
-            "Preview it in the panel on the right. (Note: Running in simulation mode — add GROQ_API_KEY to .env for real AI generation.)"
-        ),
-        "generated_code": demo_html
-    }
-
-
-def generate_website_code(user_prompt: str) -> dict:
-    """
-    Main entry point for code generation.
-    Uses Groq if the API key is configured, otherwise uses the simulation.
-    """
-    if is_groq_available:
-        return generate_website_code_with_groq(user_prompt)
-    else:
-        return generate_website_code_simulation(user_prompt)
-
-
-def generate_website_code_stream(user_prompt: str):
-    """
-    Generator version of website code generation.
-    Yields chunks of the generated response/code.
-    """
-    if is_groq_available:
-        full_prompt = build_groq_prompt(user_prompt)
-        response_stream = groq_client_instance.chat.completions.create(
-            model=GROQ_MODEL_NAME,
-            messages=[{"role": "user", "content": full_prompt}],
-            stream=True
-        )
-        for chunk in response_stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
-    else:
-        # Simulate streaming by yielding chunks of the demo HTML with short sleeps
-        demo_data = generate_website_code_simulation(user_prompt)
-        demo_html = demo_data["generated_code"]
-        intro_text = demo_data["response_text"] + "\n\n"
-
-        # Yield the response text in words/chunks
-        for word in intro_text.split(" "):
-            yield word + " "
-            time.sleep(0.02)
-
-        # Yield the HTML code in chunks
-        chunk_size = 150
-        for i in range(0, len(demo_html), chunk_size):
-            yield demo_html[i : i + chunk_size]
-            time.sleep(0.02)
+    return response_data

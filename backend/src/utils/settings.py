@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     # AI — Groq API (optional: if not set, falls back to simulation mode)
     GROQ_API_KEY: Optional[str] = None
 
+    # AI — Gemini API (Google)
+    GEMINI_API_KEY: Optional[str] = None
+
+    # Active LLM provider: "gemini" or "groq" (default: groq)
+    LLM_PROVIDER: str = "groq"
+
     # Deployment — Vercel API
     VERCEL_TOKEN: Optional[str] = None
     VERCEL_PROJECT_ID: Optional[str] = None
@@ -38,6 +44,7 @@ class Settings(BaseSettings):
     FIREBASE_STORAGE_BUCKET: Optional[str] = None
     FIREBASE_MESSAGING_SENDER_ID: Optional[str] = None
     FIREBASE_APP_ID: Optional[str] = None
+    FIREBASE_MEASUREMENT_ID: Optional[str] = None
 
     # Path to the Firebase Admin SDK service account JSON (for backend token verification)
     FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
