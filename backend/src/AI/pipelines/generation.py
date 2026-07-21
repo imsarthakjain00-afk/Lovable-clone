@@ -314,7 +314,7 @@ Project Requirements (THIS IS WHAT THE WEBSITE IS ABOUT):
 
 CRITICAL IMAGE REQUIREMENT FOR THIS SITE:
 Choose Unsplash keywords that MATCH this specific business type.
-For every <img> use: https://source.unsplash.com/featured/{W}x{H}?{keyword1},{keyword2}
+For every <img> use: https://source.unsplash.com/featured/{{W}}x{{H}}?{{keyword1}},{{keyword2}}
 Example for a local grocery shop: ?grocery,store,vegetables or ?shopkeeper,market,fresh
 Example for a restaurant: ?restaurant,food,dining
 Example for a hospital: ?hospital,medical,healthcare
