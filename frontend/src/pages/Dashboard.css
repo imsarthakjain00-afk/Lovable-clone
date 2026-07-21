@@ -214,8 +214,9 @@
   line-height: 1.5;
   padding: 0.85rem 1rem 0.5rem;
   resize: none;
-  min-height: 50px;
-  max-height: 200px;
+  min-height: 40px;
+  max-height: 120px;
+  overflow-y: auto;
   font-family: 'Inter', sans-serif;
   outline: none;
 }

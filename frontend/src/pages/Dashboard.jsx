@@ -338,6 +338,9 @@ function DashboardContent({ onLogout }) {
     const imagesToSend = [...attachedImages]; // snapshot before clearing
     setPromptInputText('');
     setAttachedImages([]);
+    // Reset textarea height after clearing
+    const ta = document.getElementById('prompt-input-textarea');
+    if (ta) { ta.style.height = 'auto'; }
     setIsGenerating(true);
     setStreamingText('');
     setStreamingCode('');
@@ -545,7 +548,7 @@ function DashboardContent({ onLogout }) {
     setPromptInputText(e.target.value);
     const el = e.target;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   };
 
   const handleLogout = () => {
