@@ -312,7 +312,7 @@ Project Requirements (THIS IS WHAT THE WEBSITE IS ABOUT):
 
 CRITICAL IMAGE REQUIREMENT FOR THIS SITE:
 Choose descriptive seed keywords for picsum.photos matching this specific business.
-Format: https://picsum.photos/seed/{descriptive-word}/{W}/{H}
+Format: https://picsum.photos/seed/[descriptive-word]/[WIDTH]/[HEIGHT]
 Example for a local shop: https://picsum.photos/seed/grocery-store-hero/1200/600 or https://picsum.photos/seed/fresh-fruits/400/400
 Example for a restaurant: https://picsum.photos/seed/gourmet-dishes/400/400
 
@@ -421,7 +421,7 @@ Project Requirements (THIS IS WHAT THE WEBSITE IS ABOUT):
 
 CRITICAL IMAGE REQUIREMENT FOR THIS SITE:
 Use picsum.photos seed URLs that MATCH this specific business.
-For every <img> use: https://picsum.photos/seed/{descriptive-word}/{W}/{H}
+For every <img> use: https://picsum.photos/seed/[descriptive-word]/[WIDTH]/[HEIGHT]
 Example for a local shop: https://picsum.photos/seed/grocery-store-hero/1200/600 or https://picsum.photos/seed/fresh-fruits/400/400
 Example for a restaurant: https://picsum.photos/seed/gourmet-dishes/400/400
 Use DIFFERENT descriptive seed words for every image so they look distinct.
