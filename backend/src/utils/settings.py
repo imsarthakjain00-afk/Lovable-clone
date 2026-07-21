@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # AI — Gemini API (Google)
     GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # Active LLM provider: "gemini" or "groq" (default: groq)
     LLM_PROVIDER: str = "gemini"
