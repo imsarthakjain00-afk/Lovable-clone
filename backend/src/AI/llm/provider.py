@@ -40,7 +40,7 @@ class GeminiProvider(LLMProvider):
         import google.generativeai as genai
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self._genai = genai
-        self.model_name = "gemini-2.0-flash"
+        self.model_name = "gemini-1.5-flash"
         logger.info(f"[LLM] Using Gemini provider — model: {self.model_name}")
 
     def _convert_messages(self, messages: List[Dict[str, str]]) -> tuple[str, list]:
