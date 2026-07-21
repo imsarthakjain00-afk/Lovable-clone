@@ -443,7 +443,7 @@ function DashboardContent({ onLogout }) {
             setPreviewState('ERROR');
             setStreamingCode('');
             ws.close();
-            break;
+            return;
           }
 
           setGeneratedWebsiteCode(finalHtml);
