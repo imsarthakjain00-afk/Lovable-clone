@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
 
     # Active LLM provider: "gemini" or "groq" (default: groq)
-    LLM_PROVIDER: str = "groq"
+    LLM_PROVIDER: str = "gemini"
 
     # Deployment — Vercel API
     VERCEL_TOKEN: Optional[str] = None
