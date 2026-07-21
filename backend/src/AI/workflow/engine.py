@@ -118,8 +118,13 @@ class WorkflowEngine:
                 "text": "Still planning the architecture — hang tight for a moment! ⚡"
             }
 
-        # Legacy states — skip straight to generation if encountered
-        if state in (WorkflowState.DESIGN_SELECTION, WorkflowState.PRD_REVIEW):
+        if state == WorkflowState.DESIGN_SELECTION:
+            # DESIGN_SELECTION is no longer shown — just forward to PRD review
+            self.brain.workflow_stage = WorkflowState.PRD_REVIEW
+            return self.brain, await self._handle_prd_review()
+
+        if state == WorkflowState.PRD_REVIEW:
+            # User confirmed — any message here means "yes, build it"
             self.brain.workflow_stage = WorkflowState.GENERATION_PIPELINE
             return self.brain, self._handle_generation_start()
 
@@ -173,7 +178,7 @@ Response:"""
 
         text = await llm.complete(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=200,
+            max_tokens=600,
             temperature=0.4
         )
         return {
@@ -228,7 +233,7 @@ Output ONLY valid JSON."""
         except Exception as e:
             logger.warning(f"[ARCHITECTURE_PLANNING] Non-fatal: {e}")
 
-        # Auto-select a sensible default design and skip user selection entirely
+        # Auto-select a sensible default design silently
         try:
             from src.AI.catalog.service import DesignCatalogService
             from src.AI.catalog.adaptation import DesignAdaptationService
@@ -244,9 +249,9 @@ Output ONLY valid JSON."""
             logger.warning(f"[ARCHITECTURE_PLANNING] Auto-design selection non-fatal: {e}")
             self.brain.design_id = "external_apple"
 
-        # Skip directly to generation
-        self.brain.workflow_stage = WorkflowState.GENERATION_PIPELINE
-        return self._handle_generation_start()
+        # Show PRD summary and ask user to confirm before building
+        self.brain.workflow_stage = WorkflowState.PRD_REVIEW
+        return await self._handle_prd_review()
 
     @with_retry(RetryPolicy(max_retries=1))
     async def _show_design_options(self) -> Dict[str, Any]:

@@ -22,6 +22,7 @@ function DashboardContent({ onLogout }) {
   const [previewState, setPreviewState] = useState('EMPTY');
   const [promptInputText, setPromptInputText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isWaiting, setIsWaiting] = useState(false); // lightweight waiting for ANY response
   const [streamingText, setStreamingText] = useState('');
   const [streamingCode, setStreamingCode] = useState('');
   const [rightPanelTab, setRightPanelTab] = useState('preview');
@@ -341,11 +342,12 @@ function DashboardContent({ onLogout }) {
     // Reset textarea height after clearing
     const ta = document.getElementById('prompt-input-textarea');
     if (ta) { ta.style.height = 'auto'; }
-    setIsGenerating(true);
+    setIsWaiting(true);
     setStreamingText('');
     setStreamingCode('');
     setErrorMessage('');
-    setPreviewState('LOADING');
+    // Do NOT set isGenerating=true or previewState='LOADING' yet —
+    // we only do that when the server replies with GENERATING type.
 
     const optimisticUserMessage = {
       id: `temp-${Date.now()}`,
@@ -358,6 +360,7 @@ function DashboardContent({ onLogout }) {
 
     const token = localStorage.getItem('auth_token');
     if (!token) {
+      setIsWaiting(false);
       setErrorMessage('You must be logged in to generate a website.');
       setIsGenerating(false);
       return;
@@ -432,6 +435,17 @@ function DashboardContent({ onLogout }) {
         } else if (data.data.type === 'generation_complete') {
           const finalHtml = data.data.generated_code;
           const manifest = data.data.file_manifest || {};
+
+          if (!finalHtml || finalHtml.trim().length < 100) {
+            // Empty or near-empty HTML — treat as failure
+            setErrorMessage('Website generation produced no content. Please try again with a clearer description.');
+            setIsGenerating(false);
+            setPreviewState('ERROR');
+            setStreamingCode('');
+            ws.close();
+            break;
+          }
+
           setGeneratedWebsiteCode(finalHtml);
           setPreviewState('RENDERING');
           setRightPanelTab('preview');
@@ -508,13 +522,20 @@ function DashboardContent({ onLogout }) {
         }
         
         if (data.interaction_type !== 'GENERATING') {
+            setIsWaiting(false);
             setIsGenerating(false);
             ws.close();
+        } else {
+            // Server says generation is starting — NOW activate loading state
+            setIsWaiting(false);
+            setIsGenerating(true);
+            setPreviewState('LOADING');
         }
         setStreamingText('');
         setStreamingCode('');
       } else if (data.type === 'generation_failed' || data.type === 'generation_timeout') {
         setErrorMessage(data.error || 'The generation process failed.');
+        setIsWaiting(false);
         setIsGenerating(false);
         setPreviewState('ERROR');
         setStreamingText('');
@@ -525,13 +546,15 @@ function DashboardContent({ onLogout }) {
     ws.onerror = (error) => {
       console.error('[WebSocket Error]', error);
       setErrorMessage('WebSocket connection failed. Make sure the backend server is running on port 8000.');
+      setIsWaiting(false);
       setIsGenerating(false);
-      setPreviewState('ERROR');
+      setPreviewState((prev) => prev === 'LOADING' ? 'EMPTY' : prev);
       setStreamingText('');
       setChatMessages((prev) => prev.filter((msg) => msg.id !== optimisticUserMessage.id));
     };
 
     ws.onclose = () => {
+      setIsWaiting(false);
       if (isGenerating) {
         setIsGenerating(false);
       }
@@ -789,7 +812,7 @@ function DashboardContent({ onLogout }) {
                   </div>
                 ))}
 
-                {isGenerating && (
+                {(isWaiting || isGenerating) && (
                   <div className="chat-message is-ai-message">
                     <div className="chat-message-avatar" aria-hidden="true">✦</div>
                     <div className="chat-message-content">
@@ -823,7 +846,8 @@ function DashboardContent({ onLogout }) {
                             <Loader2 size={12} className="chat-spinner-icon" />
                             {streamingText ? streamingText
                               : streamingCode ? `✍ Writing code... (${streamingCode.length} chars)`
-                              : 'Generating your website...'}
+                              : isGenerating ? 'Generating your website...'
+                              : 'Thinking...'}
                           </div>
                         )}
                       </div>
@@ -862,7 +886,7 @@ function DashboardContent({ onLogout }) {
                       onChange={handleTextareaInput}
                       onKeyDown={handlePromptKeyDown}
                       rows={1}
-                      disabled={isGenerating}
+                      disabled={isWaiting || isGenerating}
                     />
                     <div className="chat-input-toolbar">
                       <div className="chat-toolbar-left">
@@ -893,7 +917,7 @@ function DashboardContent({ onLogout }) {
                           id="send-prompt-button"
                           type="submit"
                           className="chat-send-btn"
-                          disabled={(!promptInputText.trim() && attachedImages.length === 0) || isGenerating}
+                          disabled={(!promptInputText.trim() && attachedImages.length === 0) || isWaiting || isGenerating}
                         >
                           Send
                         </button>
