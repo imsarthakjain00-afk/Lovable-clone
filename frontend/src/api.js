@@ -96,18 +96,20 @@ export const projectsAPI = {
 // ─── AI Code Generation API ───────────────────────────────────────────────────
 
 export const aiAPI = {
-  generateWebsiteFromPrompt: async (projectId, userPrompt) => {
+  generateWebsiteFromPrompt: async (projectId, userPrompt, images = []) => {
     const response = await api.post('/ai/generate', {
       project_id: projectId,
       user_prompt: userPrompt,
+      images: images,
     });
     return response.data;
   },
 
-  deepBuildWebsite: async (projectId, userPrompt) => {
+  deepBuildWebsite: async (projectId, userPrompt, images = []) => {
     const response = await api.post('/ai/deep-build', {
       project_id: projectId,
       user_prompt: userPrompt,
+      images: images,
     });
     return response.data;
   },

@@ -115,20 +115,48 @@ Add these CSS animations at minimum:
 
 
 def _build_image_context(images: list) -> str:
-    """Build the image section of the prompt from base64 data URIs."""
+    """Build the image section of the prompt using clean placeholder tokens."""
     if not images:
         return ""
-    lines = ["\nUser-Provided Images (CRITICAL — you MUST use these EXACT data URIs as <img src=\"...\"> in the website):"]
+    lines = [
+        "\n═══════════════════════════════════════",
+        " USER UPLOADED IMAGES (CRITICAL MANDATE)",
+        "═══════════════════════════════════════",
+        "The user uploaded custom images for this website. You MUST embed them in key sections (e.g. hero image, logo, feature cards, or product showcase).",
+        "Use these EXACT string tokens as the src attribute values in your <img> tags:"
+    ]
+    for i, img in enumerate(images):
+        name = img.get("name", f"Image_{i+1}")
+        token = f"UPLOADED_IMAGE_{i+1}"
+        lines.append(f"  • Image {i+1} ({name}) → Use src=\"{token}\" (e.g. <img src=\"{token}\" alt=\"{name}\" class=\"...\">)")
+    lines.append("\nRULES FOR UPLOADED IMAGES:")
+    lines.append("1. Do NOT write raw base64 data. Use the exact tokens `UPLOADED_IMAGE_1`, `UPLOADED_IMAGE_2`, etc. as the src string.")
+    lines.append("2. Make uploaded images prominent — place UPLOADED_IMAGE_1 in the Hero section or Navbar logo, and others in feature/product cards.")
+    lines.append("3. Always add styling (e.g. rounded corners, object-fit: cover, max-height, drop-shadow).")
+    return "\n".join(lines)
+
+
+def _replace_image_placeholders(html_code: str, images: list) -> str:
+    """Post-process HTML: replace placeholder tokens with actual base64 data URIs."""
+    if not images or not html_code:
+        return html_code
+    
+    clean_html = html_code
     for i, img in enumerate(images):
         data_url = img.get("dataUrl") or img.get("data_url", "")
-        name = img.get("name", f"image-{i+1}")
-        if data_url and data_url.startswith("data:image"):
-            lines.append(f"  Image {i+1} — filename: {name}")
-            lines.append(f"  Use this EXACT src value: {data_url[:80]}... (full data URI provided)")
-            lines.append(f"  FULL_DATA_URI_{i+1}: {data_url}")
-    lines.append("\nIMPORTANT: Replace ALL generic placeholder images with the user's uploaded images above.")
-    lines.append("Use the FULL_DATA_URI values verbatim in the <img src=\"\"> attributes.")
-    return "\n".join(lines)
+        if not data_url or not data_url.startswith("data:image"):
+            continue
+        
+        token = f"UPLOADED_IMAGE_{i+1}"
+        alt_token_1 = f"FULL_DATA_URI_{i+1}"
+        alt_token_2 = f"FULL_DATA_URI_{i}"
+        
+        # Replace tokens across all possible variations
+        clean_html = clean_html.replace(token, data_url)
+        clean_html = clean_html.replace(alt_token_1, data_url)
+        clean_html = clean_html.replace(alt_token_2, data_url)
+        
+    return clean_html
 
 
 def _build_generation_prompt(brain: ProjectBrain, design_brain: DesignBrain, design_tokens: DesignTokens, is_edit: bool = False, edit_prompt: str = None, current_code: str = None, images: list = None, arch_context: str = "") -> str:
@@ -495,6 +523,9 @@ Output ONLY valid JSON, nothing else."""
     if clean_html.startswith("```"):
         clean_html = _re.sub(r'^```(html)?\s*', '', clean_html, flags=_re.IGNORECASE)
         clean_html = _re.sub(r'\s*```\s*$', '', clean_html)
+    
+    # Replace uploaded image tokens with actual data URIs
+    clean_html = _replace_image_placeholders(clean_html, images)
     
     await EventBus.publish("generation_progress", {
         "project_id": project_id, "step": "Writing HTML & CSS", "status": "completed"

@@ -14,13 +14,14 @@ ai_routes = APIRouter(prefix="/ai", tags=["AI Code Generation"])
 class DeepBuildRequest(BaseModel):
     project_id: int
     user_prompt: str
-
+    images: list = []
 
 
 class GenerateWebsiteRequest(BaseModel):
     """Request body for generating a website."""
     project_id: int
     user_prompt: str   # What the user wants to build
+    images: list = []
 
 
 class GenerateWebsiteResponse(BaseModel):

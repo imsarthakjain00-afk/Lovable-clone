@@ -107,30 +107,21 @@ class WorkflowEngine:
         if state == WorkflowState.AWAITING_PAGE_TYPE:
             page_type = self._parse_page_type(lower)
             self.brain.memory.decisions["page_structure"] = _make_decision(page_type, "confirmed")
-            # Also store in project_facts so generation pipeline can read it
             self.brain.memory.project_facts.append(f"page_type: {page_type}")
             self.brain.workflow_stage = WorkflowState.ARCHITECTURE_PLANNING
             return self.brain, await self._run_architecture_planning()
 
         if state == WorkflowState.ARCHITECTURE_PLANNING:
-            # If somehow the user sends a message while architecture is running, just wait.
+            # Architecture is running — user shouldn't be here, but push forward
             return self.brain, {
                 "type": "PROGRESS",
                 "text": "Still planning the architecture — hang tight for a moment! ⚡"
             }
 
-        if state == WorkflowState.DESIGN_SELECTION:
-            # User typed instead of clicking a design card — re-show the designs
-            return self.brain, await self._show_design_options()
-
-        if state == WorkflowState.PRD_REVIEW:
-            if any(w in lower for w in ["yes", "sure", "ok", "build", "start", "go", "yep", "absolutely", "proceed"]):
-                self.brain.workflow_stage = WorkflowState.GENERATION_PIPELINE
-                return self.brain, self._handle_generation_start()
-            else:
-                # User wants to change something — go back to design selection
-                self.brain.workflow_stage = WorkflowState.DESIGN_SELECTION
-                return self.brain, await self._show_design_options()
+        # Legacy states — skip straight to generation if encountered
+        if state in (WorkflowState.DESIGN_SELECTION, WorkflowState.PRD_REVIEW):
+            self.brain.workflow_stage = WorkflowState.GENERATION_PIPELINE
+            return self.brain, self._handle_generation_start()
 
         if state == WorkflowState.GENERATION_PIPELINE:
             return self.brain, self._handle_generation_start()
@@ -198,7 +189,7 @@ Response:"""
 
     @with_retry(RetryPolicy(max_retries=1))
     async def _run_architecture_planning(self) -> Dict[str, Any]:
-        """Plans the architecture silently, then immediately shows design options."""
+        """Plans the architecture silently, auto-selects a design, then starts generation immediately."""
         user_idea = next(
             (f.replace("user_idea: ", "") for f in self.brain.memory.project_facts if f.startswith("user_idea:")),
             "a website"
@@ -237,8 +228,25 @@ Output ONLY valid JSON."""
         except Exception as e:
             logger.warning(f"[ARCHITECTURE_PLANNING] Non-fatal: {e}")
 
-        self.brain.workflow_stage = WorkflowState.DESIGN_SELECTION
-        return await self._show_design_options()
+        # Auto-select a sensible default design and skip user selection entirely
+        try:
+            from src.AI.catalog.service import DesignCatalogService
+            from src.AI.catalog.adaptation import DesignAdaptationService
+            recs = await DesignCatalogService.get_recommendations(self.brain)
+            if recs:
+                self.brain.design_id = recs[0].get("id") or recs[0].get("design_id", "external_apple")
+            else:
+                self.brain.design_id = "external_apple"
+            base_brain, _ = await DesignCatalogService.process_selection(self.brain.design_id)
+            adapted = await DesignAdaptationService.adapt(self.brain, base_brain)
+            self.brain.design = adapted
+        except Exception as e:
+            logger.warning(f"[ARCHITECTURE_PLANNING] Auto-design selection non-fatal: {e}")
+            self.brain.design_id = "external_apple"
+
+        # Skip directly to generation
+        self.brain.workflow_stage = WorkflowState.GENERATION_PIPELINE
+        return self._handle_generation_start()
 
     @with_retry(RetryPolicy(max_retries=1))
     async def _show_design_options(self) -> Dict[str, Any]:

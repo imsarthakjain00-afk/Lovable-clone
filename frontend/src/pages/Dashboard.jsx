@@ -365,7 +365,8 @@ function DashboardContent({ onLogout }) {
 
     if (buildMode === 'deep') {
       try {
-        const data = await aiAPI.deepBuildWebsite(targetProject.id, userPromptText);
+        const formattedImages = imagesToSend.map(img => ({ name: img.name, dataUrl: img.dataUrl, type: img.type }));
+        const data = await aiAPI.deepBuildWebsite(targetProject.id, userPromptText, formattedImages);
         
         setChatMessages((prev) =>
           prev.map((msg) =>
