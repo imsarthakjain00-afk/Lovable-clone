@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Deployment — Vercel API
     VERCEL_TOKEN: Optional[str] = None
     VERCEL_PROJECT_ID: Optional[str] = None
+    VERCEL_TEAM_ID: Optional[str] = None
 
     # Firebase Config for generated sites
     FIREBASE_API_KEY: Optional[str] = None

@@ -12,11 +12,14 @@ DEPLOY_TIMEOUT = 120
 POLL_INTERVAL = 3
 
 
-async def _disable_deployment_protection(client: httpx.AsyncClient, project_id: str, headers: dict):
+async def _disable_deployment_protection(client: httpx.AsyncClient, project_id: str, headers: dict, team_id: str = None):
     """Disable SSO/password protection on the Vercel project so URLs are publicly accessible."""
     try:
+        url = f"{VERCEL_API}/v9/projects/{project_id}"
+        if team_id:
+            url += f"?teamId={team_id}"
         resp = await client.patch(
-            f"{VERCEL_API}/v9/projects/{project_id}",
+            url,
             json={"ssoProtection": None, "passwordProtection": None},
             headers=headers,
         )
@@ -25,15 +28,19 @@ async def _disable_deployment_protection(client: httpx.AsyncClient, project_id: 
         logger.warning(f"[DEPLOY] Could not disable protection: {e}")
 
 
-async def _poll_until_ready(client: httpx.AsyncClient, deployment_id: str, headers: dict) -> dict:
+async def _poll_until_ready(client: httpx.AsyncClient, deployment_id: str, headers: dict, team_id: str = None) -> dict:
     """Poll until readyState is READY or ERROR/CANCELED. Returns final deployment data."""
     elapsed = 0
     while elapsed < DEPLOY_TIMEOUT:
         await asyncio.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
 
+        url = f"{VERCEL_API}/v13/deployments/{deployment_id}"
+        if team_id:
+            url += f"?teamId={team_id}"
+
         resp = await client.get(
-            f"{VERCEL_API}/v13/deployments/{deployment_id}",
+            url,
             headers=headers,
         )
         if resp.status_code >= 400:
@@ -102,8 +109,12 @@ async def deploy_to_vercel(html_content: str, project_title: str) -> str:
     async with httpx.AsyncClient(timeout=120.0) as client:
         # Step 1: Create the deployment
         logger.info(f"[DEPLOY] Creating Vercel deployment for '{safe_name}'")
+        deploy_url = f"{VERCEL_API}/v13/deployments?skipAutoDetectionConfirmation=1"
+        if settings.VERCEL_TEAM_ID:
+            deploy_url += f"&teamId={settings.VERCEL_TEAM_ID}"
+
         response = await client.post(
-            f"{VERCEL_API}/v13/deployments?skipAutoDetectionConfirmation=1",
+            deploy_url,
             json=payload,
             headers=auth_headers,
         )
@@ -130,7 +141,7 @@ async def deploy_to_vercel(html_content: str, project_title: str) -> str:
 
         # Step 2: Disable deployment protection so URL is public (no "You need access")
         if project_id:
-            await _disable_deployment_protection(client, project_id, auth_headers)
+            await _disable_deployment_protection(client, project_id, auth_headers, team_id=settings.VERCEL_TEAM_ID)
 
         # Step 3: If already READY return immediately
         if initial_state in ("READY", "ready"):
@@ -139,7 +150,7 @@ async def deploy_to_vercel(html_content: str, project_title: str) -> str:
 
         # Step 4: Poll until READY
         logger.info(f"[DEPLOY] Polling {deployment_id}...")
-        final_data = await _poll_until_ready(client, deployment_id, poll_headers)
+        final_data = await _poll_until_ready(client, deployment_id, poll_headers, team_id=settings.VERCEL_TEAM_ID)
 
         final_url = final_data.get("url") or url
         if not final_url:
