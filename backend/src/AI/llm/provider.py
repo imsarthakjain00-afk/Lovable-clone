@@ -80,34 +80,57 @@ class GeminiProvider(LLMProvider):
             )
             return response.text
 
-        return await asyncio.get_event_loop().run_in_executor(None, _sync_call)
+        return await asyncio.get_running_loop().run_in_executor(None, _sync_call)
 
     async def stream(self, messages: List[Dict[str, str]], max_tokens: int = 8000, temperature: float = 0.7) -> AsyncIterator[str]:
         import asyncio
+        import queue as queue_module
+
         system_prompt, history = self._convert_messages(messages)
-        
+
         model = self._genai.GenerativeModel(
             self.model_name,
             system_instruction=system_prompt if system_prompt else None,
         )
-        
-        def _sync_stream():
-            chat = model.start_chat(history=history[:-1] if len(history) > 1 else [])
-            last_user_msg = history[-1]["parts"][0] if history else ""
-            return chat.send_message(
-                last_user_msg,
-                stream=True,
-                generation_config=self._genai.types.GenerationConfig(
-                    max_output_tokens=max_tokens,
-                    temperature=temperature,
+
+        # Use a queue to bridge the sync Gemini SDK streaming with async
+        chunk_queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+        _SENTINEL = object()
+
+        def _sync_stream_all():
+            """Run in thread pool — streams ALL chunks and puts them on the queue."""
+            try:
+                chat = model.start_chat(history=history[:-1] if len(history) > 1 else [])
+                last_user_msg = history[-1]["parts"][0] if history else ""
+                response = chat.send_message(
+                    last_user_msg,
+                    stream=True,
+                    generation_config=self._genai.types.GenerationConfig(
+                        max_output_tokens=max_tokens,
+                        temperature=temperature,
+                    )
                 )
-            )
-        
-        response = await asyncio.get_event_loop().run_in_executor(None, _sync_stream)
-        
-        for chunk in response:
-            if chunk.text:
-                yield chunk.text
+                for chunk in response:
+                    if chunk.text:
+                        loop.call_soon_threadsafe(chunk_queue.put_nowait, chunk.text)
+            except Exception as e:
+                loop.call_soon_threadsafe(chunk_queue.put_nowait, e)
+            finally:
+                loop.call_soon_threadsafe(chunk_queue.put_nowait, _SENTINEL)
+
+        # Start streaming in background thread — does NOT block the event loop
+        loop.run_in_executor(None, _sync_stream_all)
+
+        # Yield chunks as they arrive from the queue
+        while True:
+            item = await chunk_queue.get()
+            if item is _SENTINEL:
+                break
+            if isinstance(item, Exception):
+                raise item
+            yield item
+
 
 
 class GroqProvider(LLMProvider):

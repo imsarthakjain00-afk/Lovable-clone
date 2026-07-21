@@ -500,7 +500,7 @@ Output ONLY valid JSON, nothing else."""
     
     full_html = ""
     try:
-        async for chunk in llm.stream(messages, max_tokens=12000, temperature=0.7):
+        async for chunk in llm.stream(messages, max_tokens=8000, temperature=0.7):
             full_html += chunk
             await EventBus.publish("code_chunk", {
                 "project_id": project_id,
