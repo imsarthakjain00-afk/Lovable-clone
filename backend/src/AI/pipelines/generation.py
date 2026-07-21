@@ -26,25 +26,34 @@ OUTPUT FORMAT — NON-NEGOTIABLE:
  ABSOLUTE PROHIBITIONS (NEVER DO THESE)
 ═══════════════════════════════════════
 ✗ NEVER use "Lorem ipsum" — write real, specific, compelling copy for the actual business
-✗ NEVER use broken <img> tags — every image MUST use a real working URL from picsum.photos
+✗ NEVER use broken <img> tags — every image MUST use a real working URL (see IMAGE RULES)
 ✗ NEVER put light/white text on a light/yellow/white background — this makes text INVISIBLE
 ✗ NEVER use generic names like "Product 1", "John Doe", "Our Service" — invent real names
 ✗ NEVER leave placeholder text like "Your tagline here" or "Description goes here"
 ✗ NEVER use a plain white (#fff) background for the hero section
 ✗ NEVER add Firebase or Supabase <script> tags — they are already injected
+✗ NEVER generate a single-page site when multi-page is requested — ALL pages must exist
 
 ═══════════════════════════════════════
  IMAGE RULES — ALWAYS FOLLOW
 ═══════════════════════════════════════
-Every <img> MUST use a real working URL. Use these formats:
-  • Product/item images: https://picsum.photos/seed/[unique-word]/400/400
-  • Hero/banner images: https://picsum.photos/seed/[unique-word]/1200/600
-  • Avatar/person images: https://picsum.photos/seed/[unique-word]/100/100
-  • Background images: https://picsum.photos/seed/[unique-word]/1920/1080
-  
-Replace [unique-word] with a descriptive word (e.g. "jacket1", "hero-main", "team-sarah").
-Use different seeds for every image so they look different.
-ALWAYS include: loading="lazy" alt="[descriptive text]" style="width:100%;object-fit:cover"
+Use Unsplash keyword images so photos MATCH the actual business content:
+
+  FORMAT: https://source.unsplash.com/featured/{WIDTH}x{HEIGHT}?{keyword1},{keyword2}
+
+Examples by use:
+  • Hero banner (local shop):   https://source.unsplash.com/featured/1200x600?grocery,store,shop
+  • Product card (food):        https://source.unsplash.com/featured/400x400?food,product,fresh
+  • Team avatar:                https://source.unsplash.com/featured/100x100?portrait,person,professional
+  • Services (medical):         https://source.unsplash.com/featured/600x400?hospital,medical,doctor
+  • Background (restaurant):    https://source.unsplash.com/featured/1920x1080?restaurant,dining,interior
+
+RULES:
+1. Pick keywords that MATCH the actual business (e.g. "coffee,cafe,barista" for a coffee shop)
+2. Use 2-3 comma-separated keywords per image URL
+3. Use DIFFERENT keyword combinations for every image so they look distinct
+4. ALWAYS add: loading="lazy" alt="[descriptive text]" style="width:100%;object-fit:cover"
+5. Add a numeric suffix if reusing similar keywords: ?bakery,bread,1 vs ?bakery,bread,2
 
 ═══════════════════════════════════════
  DESIGN STANDARDS — MANDATORY
@@ -303,47 +312,69 @@ Project Requirements (THIS IS WHAT THE WEBSITE IS ABOUT):
 {arch_context}
 {images_context}
 
-MULTI-PAGE ARCHITECTURE — MANDATORY RULES:
-The website has {len(pages)} pages: {', '.join(pages)}.
+CRITICAL IMAGE REQUIREMENT FOR THIS SITE:
+Choose Unsplash keywords that MATCH this specific business type.
+For every <img> use: https://source.unsplash.com/featured/{W}x{H}?{keyword1},{keyword2}
+Example for a local grocery shop: ?grocery,store,vegetables or ?shopkeeper,market,fresh
+Example for a restaurant: ?restaurant,food,dining
+Example for a hospital: ?hospital,medical,healthcare
+Choose YOUR OWN specific keywords based on the user's actual business.
 
-1. ALL pages go inside ONE HTML file.
-2. Each page is a <section> element with: class="page-section" id="page-<page-id>" data-page="<page-id>"
-   Required page IDs: {', '.join(page_ids)}
-3. ONLY ONE page is visible at a time. All others start hidden (display:none).
-4. Nav links switch pages by calling showPage('<page-id>').
-5. COPY THIS EXACT JavaScript router into a <script> tag before </body>:
+MULTI-PAGE ARCHITECTURE — THIS IS MANDATORY — READ CAREFULLY:
 
-<script>
-function showPage(pageId) {{
-  document.querySelectorAll('.page-section').forEach(function(s) {{
-    s.style.display = 'none';
-  }});
-  var target = document.getElementById('page-' + pageId);
-  if (target) target.style.display = 'block';
-  document.querySelectorAll('.nav-link').forEach(function(a) {{
-    a.classList.toggle('nav-active', a.dataset.page === pageId);
-  }});
-  window.location.hash = pageId;
-}}
-window.addEventListener('DOMContentLoaded', function() {{
-  var hash = window.location.hash.replace('#', '') || '{first_page}';
-  showPage(hash);
-}});
-window.addEventListener('hashchange', function() {{
-  showPage(window.location.hash.replace('#', '') || '{first_page}');
-}});
-</script>
+⚠️  YOU MUST OUTPUT ALL {len(pages)} PAGES IN ONE HTML FILE. Not just the home page. ALL of them.
 
-6. In the <style> block, include:
-   .page-section {{ display: none; }}
-   .nav-link.nav-active {{ font-weight: 700; border-bottom: 2px solid currentColor; }}
+The pages are: {', '.join(pages)}
 
-7. Each page must have FULL content — real copy, real images (picsum.photos), real layout.
-   Do NOT use placeholder content or empty sections.
-8. Sticky nav bar on every page. Each nav link MUST have:
-   class="nav-link" data-page="<page-id>" onclick="showPage('<page-id>'); return false;"
-9. ALL text must be specifically about the user's actual business — nothing generic.
-10. CONTACT FORM REQUIREMENT: If there is a 'Contact' page/section, you MUST build a full contact form (fields for Name, Email, Phone, Message, and a Submit button). Do not just list addresses.
+STRUCTURE REQUIRED (copy this pattern exactly):
+
+<body>
+  <!-- Sticky nav present on ALL pages -->
+  <nav class="navbar">...<nav>
+
+  <!-- PAGE 1 -->
+  <section class="page-section" id="page-{page_ids[0]}" data-page="{page_ids[0]}">
+    <!-- FULL page content here — hero, products/services, cards, everything -->
+  </section>
+
+  <!-- PAGE 2 -->
+  <section class="page-section" id="page-{page_ids[1] if len(page_ids) > 1 else 'about'}" data-page="{page_ids[1] if len(page_ids) > 1 else 'about'}">
+    <!-- FULL page content here — not empty, not placeholder -->
+  </section>
+
+  <!-- ... one <section class="page-section"> per page ... -->
+
+  <!-- FOOTER present on ALL pages -->
+  <footer>...</footer>
+
+  <script>
+  function showPage(pageId) {{
+    document.querySelectorAll('.page-section').forEach(s => s.style.display = 'none');
+    var t = document.getElementById('page-' + pageId);
+    if (t) t.style.display = 'block';
+    document.querySelectorAll('.nav-link').forEach(a => a.classList.toggle('nav-active', a.dataset.page === pageId));
+    window.location.hash = pageId;
+  }}
+  window.addEventListener('DOMContentLoaded', () => showPage(window.location.hash.replace('#','') || '{first_page}'));
+  window.addEventListener('hashchange', () => showPage(window.location.hash.replace('#','') || '{first_page}'));
+  </script>
+</body>
+
+STYLE REQUIRED in <style>:
+  .page-section {{ display: none; }}
+  .nav-link.nav-active {{ font-weight: 700; border-bottom: 2px solid currentColor; }}
+
+NAV LINKS — each must have:
+  <a class="nav-link" data-page="page-id" onclick="showPage('page-id'); return false;">Label</a>
+
+PER-PAGE CONTENT RULES:
+- EVERY page must have substantial content (min 3 sections of real content)
+- Home: hero + features/products + testimonials + CTA
+- About: team section with photos, company story, mission/values, timeline
+- Products/Services: full grid of cards with Unsplash images, descriptions, prices
+- Contact: full contact form (Name, Email, Phone, Message + Submit) + map embed + address
+- Blog/Gallery: grid of articles or photos with captions
+- DO NOT skip any page or leave it with minimal content
 
 OUTPUT FORMAT:
 1. Output ONLY raw HTML starting with <!DOCTYPE html> ending with </html>
@@ -351,7 +382,7 @@ OUTPUT FORMAT:
 3. Include Google Fonts matching the design spec
 4. NO markdown fences, NO text outside the HTML
 
-Build the complete multi-page website now:"""
+Build the complete multi-page website now — ALL {len(pages)} pages with full content:"""
 
     # Single-page
     return f"""Generate a complete, stunning, single-page HTML website with all sections on one scrollable page.
@@ -365,6 +396,15 @@ Project Requirements (THIS IS WHAT THE WEBSITE IS ABOUT):
 {tokens_str}
 {arch_context}
 {images_context}
+
+CRITICAL IMAGE REQUIREMENT FOR THIS SITE:
+Use Unsplash keyword images that MATCH this specific business.
+For every <img> use: https://source.unsplash.com/featured/{{W}}x{{H}}?{{keyword1}},{{keyword2}}
+Pick keywords that match the actual business type from the requirements above.
+Example for a local shop: ?grocery,store,fresh or ?shopkeeper,market,products
+Example for a tech startup: ?technology,office,startup
+Example for a restaurant: ?restaurant,food,dining,chef
+Use DIFFERENT keyword combinations for every image so they look distinct.
 
 CRITICAL OUTPUT RULES:
 1. Output ONLY raw HTML starting with <!DOCTYPE html> ending with </html>
